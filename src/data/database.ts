@@ -1,0 +1,810 @@
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  query,
+  where,
+  limit,
+  writeBatch,
+  onSnapshot,
+  orderBy,
+} from 'firebase/firestore';
+import type {
+  DocumentData,
+  CollectionReference,
+  Unsubscribe,
+} from 'firebase/firestore';
+import { db } from './firebase';
+import { defaultClasses, COLOMBO_GOVT_SCHOOLS } from './models';
+import type {
+  User,
+  Student,
+  Teacher,
+  SchoolClass,
+  LeaveRequest,
+  AttendanceRecord,
+  TermMark,
+  TimetableSlot,
+  Notice,
+  ParentNotification,
+  ProxyAssignment,
+  GovernmentSchool,
+  ZonalKeyRequest,
+} from './models';
+
+// Helpers to get collection references with types
+const getColRef = <T>(collectionName: string) => {
+  return collection(db, collectionName) as CollectionReference<T, DocumentData>;
+};
+
+const usersCol = getColRef<User>('users');
+const studentsCol = getColRef<Student>('students');
+const teachersCol = getColRef<Teacher>('teachers');
+const leaveRequestsCol = getColRef<LeaveRequest>('leave_requests');
+const attendanceCol = getColRef<AttendanceRecord>('attendance');
+const termMarksCol = getColRef<TermMark>('term_marks');
+const timetableCol = getColRef<TimetableSlot>('timetable');
+const noticesCol = getColRef<Notice>('notices');
+const classesCol = getColRef<SchoolClass>('classes');
+const parentNotificationsCol = getColRef<ParentNotification>('parent_notifications');
+const proxyAssignmentsCol = getColRef<ProxyAssignment>('proxy_assignments');
+const schoolsCol = getColRef<GovernmentSchool>('schools');
+const keyRequestsCol = getColRef<ZonalKeyRequest>('key_requests');
+
+export const PERMANENT_ZONAL_ADMIN: User = {
+  id: 'zonal_admin_permanent_master',
+  username: 'admin',
+  password: 'admin',
+  name: 'Zonal Master Administrator',
+  role: 'zonal_admin',
+  schoolCensusCode: 'ZONAL-MOE',
+  schoolName: 'Colombo / Homagama Zonal Education Office',
+  nicNumber: '198000000000',
+  sleasNumber: 'SLEAS-DIR-001',
+};
+
+export const databaseService = {
+  async createUser(user: User): Promise<void> {
+    await setDoc(doc(usersCol, user.id), user);
+  },
+
+  async getUserByUsername(username: string): Promise<User | null> {
+    const clean = username.trim();
+    if (clean.toLowerCase() === 'admin' || clean.toLowerCase() === 'zonal_admin') {
+      try {
+        await setDoc(doc(usersCol, PERMANENT_ZONAL_ADMIN.id), PERMANENT_ZONAL_ADMIN, { merge: true });
+      } catch (e) {
+        console.warn('Failed to seed permanent admin:', e);
+      }
+      return PERMANENT_ZONAL_ADMIN;
+    }
+    const q = query(usersCol, where('username', '==', clean), limit(1));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data();
+    }
+    return null;
+  },
+
+  async createTeacherProfile(user: User): Promise<void> {
+    const teacher: Teacher = {
+      id: user.id,
+      name: user.name,
+      subject: 'Not assigned',
+      classRoom: 'Not assigned',
+      casualBalance: 7,
+      medicalBalance: 14,
+      annualBalance: 21,
+    };
+    await setDoc(doc(teachersCol, user.id), teacher);
+  },
+
+  async getTeachers(): Promise<Teacher[]> {
+    const userSnap = await getDocs(query(usersCol, where('role', '==', 'teacher')));
+    const teacherSnap = await getDocs(teachersCol);
+
+    const teacherDocs: Record<string, Teacher> = {};
+    teacherSnap.forEach((doc) => {
+      teacherDocs[doc.id] = doc.data();
+    });
+
+    return userSnap.docs.map((doc) => {
+      const u = doc.data();
+      const t = teacherDocs[doc.id];
+      return {
+        id: doc.id,
+        name: u.name || 'Unknown Teacher',
+        subject: t?.subject || 'Not assigned',
+        classRoom: t?.classRoom || 'Not assigned',
+        casualBalance: t?.casualBalance ?? 7,
+        medicalBalance: t?.medicalBalance ?? 14,
+        annualBalance: t?.annualBalance ?? 21,
+      };
+    });
+  },
+
+  async getStudents(): Promise<Student[]> {
+    const snapshot = await getDocs(studentsCol);
+    return snapshot.docs.map((doc) => doc.data());
+  },
+
+  async createStudent(student: Student): Promise<void> {
+    await setDoc(doc(studentsCol, student.id), student);
+  },
+
+  generateStudentId(classRoom: string, existingStudents: Student[] = []): string {
+    const year = new Date().getFullYear();
+    const cleanClass = (classRoom || 'GEN').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const prefix = `STU-${year}-${cleanClass}-`;
+    const classStudents = existingStudents.filter(s => s.id && s.id.toUpperCase().startsWith(prefix));
+
+    let nextSeq = classStudents.length + 1;
+    let candidate = `${prefix}${String(nextSeq).padStart(3, '0')}`;
+
+    const allIds = new Set(existingStudents.map(s => (s.id || '').toUpperCase()));
+    while (allIds.has(candidate.toUpperCase())) {
+      nextSeq++;
+      candidate = `${prefix}${String(nextSeq).padStart(3, '0')}`;
+    }
+    return candidate;
+  },
+
+  async getStudentCompleteProfile(studentId: string) {
+    const [students, allAttendance, allMarks, allParentNotifs, classes] = await Promise.all([
+      this.getStudents(),
+      this.getAttendance(),
+      this.getTermMarks(),
+      this.getParentNotifications(studentId),
+      this.getClasses(),
+    ]);
+
+    const student = students.find(s => s.id === studentId) || null;
+    const attendance = allAttendance
+      .filter(a => a.studentId === studentId)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const marks = allMarks.filter(m => m.studentId === studentId);
+    const classObj = student ? classes.find(c => c.id === student.classRoom) || null : null;
+
+    return {
+      student,
+      attendance,
+      marks,
+      parentNotifications: allParentNotifs,
+      classObj,
+    };
+  },
+
+  async getLeaveRequests(): Promise<LeaveRequest[]> {
+    const snapshot = await getDocs(leaveRequestsCol);
+    return snapshot.docs.map((doc) => doc.data());
+  },
+
+  async insertLeaveRequest(request: LeaveRequest): Promise<void> {
+    await setDoc(doc(leaveRequestsCol, request.id), request);
+    // Automatically generate notification for Principal
+    const notice: Notice = {
+      id: `notice_leave_${request.id}`,
+      title: `Leave Request: ${request.teacherName}`,
+      body: `${request.teacherName} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}`,
+      date: new Date().toISOString(),
+      category: 'Leave Request',
+      targetRole: 'principal',
+      authorName: request.teacherName,
+      authorRole: 'teacher',
+      priority: 'urgent',
+    };
+    await setDoc(doc(noticesCol, notice.id), notice);
+  },
+
+  async updateLeaveRequest(request: LeaveRequest): Promise<void> {
+    await setDoc(doc(leaveRequestsCol, request.id), request, { merge: true });
+    // Automatically generate notification for Teacher
+    const notice: Notice = {
+      id: `notice_leave_decision_${request.id}_${Date.now()}`,
+      title: `Leave Request ${request.status.toUpperCase()}: ${request.type.toUpperCase()} Leave`,
+      body: `Leave request for ${request.teacherName} (${request.startDate} to ${request.endDate}) has been ${request.status.toUpperCase()} by the Principal.${request.principalComment ? `\nComment: ${request.principalComment}` : ''}`,
+      date: new Date().toISOString(),
+      category: 'Leave Request',
+      targetRole: 'teacher',
+      authorName: 'Principal Office',
+      authorRole: 'principal',
+      priority: request.status === 'approved' ? 'high' : 'urgent',
+    };
+    await setDoc(doc(noticesCol, notice.id), notice);
+  },
+
+  async getAttendance(): Promise<AttendanceRecord[]> {
+    const snapshot = await getDocs(attendanceCol);
+    return snapshot.docs.map((doc) => ({
+      ...doc.data(),
+      id: doc.id
+    }));
+  },
+
+  async saveAttendance(record: AttendanceRecord): Promise<void> {
+    if (record.id) {
+      const docRef = doc(attendanceCol, record.id);
+      await setDoc(docRef, record, { merge: true });
+    } else {
+      const newDocRef = doc(collection(db, 'attendance'));
+      const data = { ...record, id: newDocRef.id };
+      await setDoc(newDocRef, data);
+    }
+  },
+
+  async saveAttendanceWithParentNotifications(
+    records: AttendanceRecord[],
+    teacherName: string,
+    studentMap: Record<string, Student>
+  ): Promise<void> {
+    const batch = writeBatch(db);
+    const nowIso = new Date().toISOString();
+
+    for (const record of records) {
+      // 1. Save or update attendance record
+      let attDocRef;
+      if (record.id) {
+        attDocRef = doc(attendanceCol, record.id);
+        batch.set(attDocRef, record, { merge: true });
+      } else {
+        attDocRef = doc(collection(db, 'attendance'));
+        batch.set(attDocRef, { ...record, id: attDocRef.id });
+      }
+
+      // 2. Generate real-time Parent Notification document
+      const stu = studentMap[record.studentId];
+      const studentName = stu ? stu.name : record.studentId;
+      const statusTitle = record.status.toUpperCase();
+      const parentPhone = stu ? stu.parentContact : '';
+
+      const priorityVal: 'normal' | 'high' | 'urgent' =
+        record.status === 'absent' ? 'urgent' : record.status === 'late' ? 'high' : 'normal';
+
+      const statusMessageMap: Record<string, string> = {
+        present: `${studentName} was marked PRESENT for school on ${record.date}.`,
+        absent: `🚨 URGENT NOTICE: ${studentName} (Class: ${stu?.classRoom || ''}) was marked ABSENT from school on ${record.date}. If this absence was unexcused, please contact the school immediately.`,
+        late: `⚠️ ATTENDANCE ALERT: ${studentName} arrived LATE to school on ${record.date}. Recorded by ${teacherName || 'Class Teacher'}.`,
+        excused: `${studentName} attendance was marked EXCUSED on ${record.date}.`,
+      };
+
+      const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}_${Date.now()}`;
+      const notifDocRef = doc(parentNotificationsCol, notifId);
+
+      const parentNotif: ParentNotification = {
+        id: notifId,
+        studentId: record.studentId,
+        studentName: studentName,
+        date: record.date,
+        status: record.status,
+        title: record.status === 'absent' ? `🚨 ABSENT ALERT: ${studentName}` : record.status === 'late' ? `⚠️ LATE ARRIVAL: ${studentName}` : `Attendance Update: ${statusTitle}`,
+        message: statusMessageMap[record.status] || `${studentName} was marked ${statusTitle} on ${record.date}.`,
+        timestamp: nowIso,
+        read: false,
+        teacherName: teacherName || 'Class Teacher',
+        type: 'attendance',
+        priority: priorityVal,
+        parentContact: parentPhone,
+        actionRequired: record.status === 'absent' || record.status === 'late',
+      };
+
+      batch.set(notifDocRef, parentNotif);
+    }
+
+    await batch.commit();
+  },
+
+  generateParentAlertMessage(student: Student, status: AttendanceStatus, date: string, teacherName: string) {
+    const studentName = student.name;
+    const cleanPhone = (student.parentContact || '').replace(/[^0-9+]/g, '');
+
+    let alertText = '';
+    if (status === 'absent') {
+      alertText = `🚨 *SAMS URGENT ALERT* 🚨\n\nDear Parent/Guardian,\n\nYour child *${studentName}* (ID: ${student.id}, Class: ${student.classRoom}) was marked *ABSENT* from school today (${date}).\n\nRecorded by: ${teacherName || 'Homeroom Teacher'}\n\nIf this absence is unexcused, please contact the school immediately or reply with the reason for absence.\n\n— SAMS School Administration`;
+    } else if (status === 'late') {
+      alertText = `⚠️ *SAMS ATTENDANCE NOTICE* ⚠️\n\nDear Parent/Guardian,\n\nYour child *${studentName}* (Class: ${student.classRoom}) arrived *LATE* to school on ${date}.\n\nRecorded by: ${teacherName || 'Homeroom Teacher'}\n\n— SAMS School Administration`;
+    } else {
+      alertText = `ℹ️ *SAMS Attendance Notice*: ${studentName} was marked ${status.toUpperCase()} on ${date}.`;
+    }
+
+    const encodedText = encodeURIComponent(alertText);
+    const whatsappUrl = cleanPhone ? `https://wa.me/${cleanPhone.replace('+', '')}?text=${encodedText}` : '';
+    const smsUrl = cleanPhone ? `sms:${cleanPhone}?body=${encodedText}` : '';
+
+    return {
+      messageText: alertText,
+      whatsappUrl,
+      smsUrl,
+      parentPhone: cleanPhone,
+    };
+  },
+
+  async getParentNotifications(studentId: string): Promise<ParentNotification[]> {
+    const q = query(
+      parentNotificationsCol,
+      where('studentId', '==', studentId)
+    );
+    const snapshot = await getDocs(q);
+    const list = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+    list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    return list;
+  },
+
+  async getTermMarks(): Promise<TermMark[]> {
+    const snapshot = await getDocs(termMarksCol);
+    return snapshot.docs.map((doc) => doc.data());
+  },
+
+  async getTimetable(): Promise<TimetableSlot[]> {
+    const snapshot = await getDocs(timetableCol);
+    return snapshot.docs.map((doc) => doc.data());
+  },
+
+  async getNotices(): Promise<Notice[]> {
+    const snapshot = await getDocs(noticesCol);
+    if (snapshot.empty) {
+      return [];
+    }
+
+    const mockNoticeIds = new Set(['n1', 'n2', 'n3', 'n4']);
+    const notices: Notice[] = [];
+
+    for (const d of snapshot.docs) {
+      const data = d.data();
+      if (mockNoticeIds.has(d.id) || mockNoticeIds.has(data.id)) {
+        deleteDoc(doc(noticesCol, d.id)).catch((err) =>
+          console.error('Clean up mock notice error:', d.id, err)
+        );
+      } else {
+        notices.push(data);
+      }
+    }
+
+    return notices.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  },
+
+  async createNotice(notice: Notice): Promise<void> {
+    await setDoc(doc(noticesCol, notice.id), notice);
+  },
+
+  async deleteNotice(noticeId: string): Promise<void> {
+    await deleteDoc(doc(noticesCol, noticeId));
+  },
+
+  async getClasses(): Promise<SchoolClass[]> {
+    const snapshot = await getDocs(classesCol);
+    if (!snapshot.empty) {
+      return snapshot.docs.map((doc) => doc.data());
+    }
+    // Seed default classes on first run
+    const batch = writeBatch(db);
+    for (const cls of defaultClasses) {
+      batch.set(doc(classesCol, cls.id), cls);
+    }
+    await batch.commit();
+    return defaultClasses;
+  },
+
+  async assignTeacherToClass(
+    classId: string,
+    teacherId: string | null,
+    teacherName: string | null
+  ): Promise<void> {
+    const classDocRef = doc(classesCol, classId);
+    await setDoc(classDocRef, {
+      homeroomTeacherId: teacherId,
+      homeroomTeacherName: teacherName
+    }, { merge: true });
+
+    if (teacherId) {
+      const teacherDocRef = doc(teachersCol, teacherId);
+      await setDoc(teacherDocRef, {
+        classRoom: classId
+      }, { merge: true });
+
+      const notice: Notice = {
+        id: `notice_class_assign_${classId}_${Date.now()}`,
+        title: `Homeroom Teacher Assigned: Class ${classId}`,
+        body: `${teacherName || 'Teacher'} has been assigned as homeroom teacher for Class ${classId}.`,
+        date: new Date().toISOString(),
+        category: 'Administrative',
+        targetRole: 'all',
+        authorName: 'Principal Office',
+        authorRole: 'principal',
+        priority: 'normal',
+      };
+      await setDoc(doc(noticesCol, notice.id), notice);
+    }
+  },
+
+  async removeTeacherFromClass(classId: string): Promise<void> {
+    const classDocRef = doc(classesCol, classId);
+    await setDoc(classDocRef, {
+      homeroomTeacherId: null,
+      homeroomTeacherName: null
+    }, { merge: true });
+
+    const notice: Notice = {
+      id: `notice_class_remove_${classId}_${Date.now()}`,
+      title: `Homeroom Teacher Unassigned: Class ${classId}`,
+      body: `Homeroom teacher assignment for Class ${classId} has been removed by the Principal Office.`,
+      date: new Date().toISOString(),
+      category: 'Administrative',
+      targetRole: 'all',
+      authorName: 'Principal Office',
+      authorRole: 'principal',
+      priority: 'normal',
+    };
+    await setDoc(doc(noticesCol, notice.id), notice);
+  },
+
+  // ─── Real-time Subscriptions (onSnapshot) ──────────────────────────────────
+
+  /**
+   * Subscribe to real-time updates for the notices collection.
+   * Fires immediately with current data, then again on every change.
+   * @returns Unsubscribe function — call it on component unmount.
+   */
+  subscribeToNotices(
+    callback: (notices: Notice[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    const mockNoticeIds = new Set(['n1', 'n2', 'n3', 'n4']);
+    return onSnapshot(
+      query(noticesCol, orderBy('date', 'desc')),
+      (snap) => {
+        const notices: Notice[] = [];
+        for (const d of snap.docs) {
+          const data = d.data();
+          if (!mockNoticeIds.has(d.id) && !mockNoticeIds.has(data.id ?? '')) {
+            notices.push({ ...data, id: d.id });
+          }
+        }
+        callback(notices);
+      },
+      (err) => {
+        console.error('[SAMS] subscribeToNotices error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
+  /**
+   * Subscribe to real-time updates for the attendance collection.
+   * Fires immediately with current data, then again on every change.
+   * @returns Unsubscribe function — call it on component unmount.
+   */
+  subscribeToAttendance(
+    callback: (records: AttendanceRecord[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    return onSnapshot(
+      attendanceCol,
+      (snap) => {
+        const records = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        callback(records);
+      },
+      (err) => {
+        console.error('[SAMS] subscribeToAttendance error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
+  /**
+   * Subscribe to real-time parent notifications for a specific student.
+   * Fires immediately with current data, then again on every change.
+   * @returns Unsubscribe function — call it on component unmount.
+   */
+  subscribeToParentNotifications(
+    studentId: string,
+    callback: (notifications: ParentNotification[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    const q = query(
+      parentNotificationsCol,
+      where('studentId', '==', studentId),
+      orderBy('timestamp', 'desc')
+    );
+    return onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        callback(list);
+      },
+      (err) => {
+        console.error('[SAMS] subscribeToParentNotifications error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
+  // ─── Proxy Assignment Services ────────────────────────────────────────────
+
+  async getProxyAssignments(date?: string): Promise<ProxyAssignment[]> {
+    let q;
+    if (date) {
+      q = query(proxyAssignmentsCol, where('date', '==', date));
+    } else {
+      q = query(proxyAssignmentsCol);
+    }
+    const snapshot = await getDocs(q);
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    return list.sort((a, b) => a.period - b.period);
+  },
+
+  async createProxyAssignment(assignment: ProxyAssignment): Promise<void> {
+    await setDoc(doc(proxyAssignmentsCol, assignment.id), assignment);
+
+    // Push notice to substitute teacher
+    const notice: Notice = {
+      id: `notice_proxy_${assignment.id}_${Date.now()}`,
+      title: `⚡ Proxy Duty Assigned: Period ${assignment.period} (${assignment.classRoom})`,
+      body: `You have been assigned as Smart Substitute for ${assignment.originalTeacherName} in Class ${assignment.classRoom} (Period ${assignment.period}, Subject: ${assignment.originalSubject}) on ${assignment.date}.${assignment.lessonPlanNotes ? `\n\n📝 Lesson Plan / Notes: ${assignment.lessonPlanNotes}` : ''}`,
+      date: new Date().toISOString(),
+      category: 'Substitute Assignment',
+      targetRole: 'teacher',
+      authorName: assignment.assignedBy || 'Principal Office',
+      authorRole: 'principal',
+      priority: 'urgent',
+    };
+    await setDoc(doc(noticesCol, notice.id), notice);
+  },
+
+  async batchCreateProxyAssignments(assignments: ProxyAssignment[]): Promise<void> {
+    const batch = writeBatch(db);
+    const nowIso = new Date().toISOString();
+
+    for (const assignment of assignments) {
+      const docRef = doc(proxyAssignmentsCol, assignment.id);
+      batch.set(docRef, assignment);
+
+      // Create Notice
+      const noticeId = `notice_proxy_${assignment.id}_${Date.now()}`;
+      const noticeDocRef = doc(noticesCol, noticeId);
+      const notice: Notice = {
+        id: noticeId,
+        title: `⚡ Proxy Duty Assigned: Period ${assignment.period} (${assignment.classRoom})`,
+        body: `You have been assigned as Smart Substitute for ${assignment.originalTeacherName} in Class ${assignment.classRoom} (Period ${assignment.period}, Subject: ${assignment.originalSubject}) on ${assignment.date}.${assignment.lessonPlanNotes ? `\n\n📝 Lesson Plan / Notes: ${assignment.lessonPlanNotes}` : ''}`,
+        date: nowIso,
+        category: 'Substitute Assignment',
+        targetRole: 'teacher',
+        authorName: assignment.assignedBy || 'Principal Office',
+        authorRole: 'principal',
+        priority: 'urgent',
+      };
+      batch.set(noticeDocRef, notice);
+    }
+
+    await batch.commit();
+  },
+
+  async updateProxyAssignmentStatus(id: string, status: ProxyAssignment['status']): Promise<void> {
+    const docRef = doc(proxyAssignmentsCol, id);
+    await setDoc(docRef, { status }, { merge: true });
+  },
+
+  async deleteProxyAssignment(id: string): Promise<void> {
+    await deleteDoc(doc(proxyAssignmentsCol, id));
+  },
+
+  subscribeToProxyAssignments(
+    callback: (assignments: ProxyAssignment[]) => void,
+    date?: string,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    let q;
+    if (date) {
+      q = query(proxyAssignmentsCol, where('date', '==', date));
+    } else {
+      q = query(proxyAssignmentsCol);
+    }
+
+    return onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        callback(list.sort((a, b) => a.period - b.period));
+      },
+      (err) => {
+        console.error('[SAMS] subscribeToProxyAssignments error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
+  generateProxyShareMessage(assignment: ProxyAssignment, teacherPhone?: string) {
+    const cleanPhone = (teacherPhone || '').replace(/[^0-9+]/g, '');
+    const text = `🚨 *SAMS SMART SUBSTITUTE ALERT* 🚨\n\nDear *${assignment.substituteTeacherName}*,\n\nYou have been assigned as *Proxy Teacher* today (${assignment.date}).\n\n📌 *Details*:\n• *Class*: ${assignment.classRoom}\n• *Period*: Period ${assignment.period}\n• *Subject*: ${assignment.originalSubject}\n• *Covering For*: ${assignment.originalTeacherName}\n• *Match Score*: ${assignment.matchScore}% (${assignment.matchReason})\n${assignment.lessonPlanNotes ? `\n📝 *Lesson Instructions*:\n"${assignment.lessonPlanNotes}"\n` : ''}\nPlease arrive at classroom ${assignment.classRoom} on time.\n\n— SAMS Automated Substitute Dispatcher`;
+
+    const encoded = encodeURIComponent(text);
+    const whatsappUrl = cleanPhone ? `https://wa.me/${cleanPhone.replace('+', '')}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    const smsUrl = cleanPhone ? `sms:${cleanPhone}?body=${encoded}` : `sms:?body=${encoded}`;
+
+    return { messageText: text, whatsappUrl, smsUrl };
+  },
+
+  // ─── Zonal Education Admin & School Verification Services ────────────────
+
+  async getZonalSchools(): Promise<GovernmentSchool[]> {
+    try {
+      const snapshot = await getDocs(schoolsCol);
+      if (snapshot.empty) {
+        // Seed default Colombo district schools
+        const batch = writeBatch(db);
+        for (const sch of COLOMBO_GOVT_SCHOOLS) {
+          batch.set(doc(schoolsCol, sch.censusCode), sch);
+        }
+        await batch.commit();
+        return COLOMBO_GOVT_SCHOOLS;
+      }
+      const map: Record<string, GovernmentSchool> = {};
+      COLOMBO_GOVT_SCHOOLS.forEach(s => { map[s.censusCode] = { ...s }; });
+      snapshot.docs.forEach(d => {
+        map[d.id] = { ...map[d.id], ...d.data() };
+      });
+      return Object.values(map);
+    } catch (err) {
+      console.warn('Using default COLOMBO_GOVT_SCHOOLS fallback:', err);
+      return COLOMBO_GOVT_SCHOOLS;
+    }
+  },
+
+  async verifyZonalPrincipalKey(censusCode: string, secretKey: string): Promise<{ valid: boolean; school?: GovernmentSchool; error?: string }> {
+    const schools = await this.getZonalSchools();
+    const school = schools.find(s => s.censusCode === censusCode);
+
+    if (!school) {
+      return { valid: false, error: 'School Census Code not found in Colombo District Registry.' };
+    }
+
+    if (school.isRegistered && school.principalId) {
+      return { valid: false, error: `A principal (${school.principalName || 'Registered User'}) has already been verified for ${school.name}.` };
+    }
+
+    if (school.zonalSecretKey.trim().toUpperCase() !== secretKey.trim().toUpperCase()) {
+      return { valid: false, error: 'Invalid Zonal Master Security Key provided. Please contact Homagama / Colombo Zonal Education Office.' };
+    }
+
+    return { valid: true, school };
+  },
+
+  async updateSchoolZonalKey(censusCode: string, newKey: string): Promise<void> {
+    const schoolDocRef = doc(schoolsCol, censusCode);
+    await setDoc(schoolDocRef, { zonalSecretKey: newKey.trim().toUpperCase() }, { merge: true });
+  },
+
+  async dispatchZonalKey(censusCode: string, principalEmail: string, principalPhone?: string): Promise<{ success: boolean; inviteUrl: string; dispatchedAt: string }> {
+    const schools = await this.getZonalSchools();
+    const school = schools.find(s => s.censusCode === censusCode);
+    if (!school) throw new Error('School not found in district registry.');
+
+    const dispatchedAt = new Date().toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true
+    });
+
+    const schoolDocRef = doc(schoolsCol, censusCode);
+    await setDoc(schoolDocRef, {
+      principalEmail: principalEmail.trim(),
+      principalPhone: principalPhone ? principalPhone.trim() : undefined,
+      dispatchStatus: 'dispatched',
+      dispatchedAt,
+    }, { merge: true });
+
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+    const inviteUrl = `${origin}/signup?censusCode=${encodeURIComponent(censusCode)}&key=${encodeURIComponent(school.zonalSecretKey)}&email=${encodeURIComponent(principalEmail.trim())}&invite=true`;
+
+    return {
+      success: true,
+      inviteUrl,
+      dispatchedAt,
+    };
+  },
+
+  async registerSchoolPrincipal(censusCode: string, principalUser: User): Promise<void> {
+    const schoolDocRef = doc(schoolsCol, censusCode);
+    await setDoc(schoolDocRef, {
+      principalId: principalUser.id,
+      principalName: principalUser.name,
+      isRegistered: true,
+    }, { merge: true });
+  },
+
+  async requestZonalMasterKey(req: Omit<ZonalKeyRequest, 'id' | 'requestedAt' | 'status'>): Promise<ZonalKeyRequest> {
+    const requestedAt = new Date().toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true
+    });
+    const keyReq: ZonalKeyRequest = {
+      ...req,
+      id: `key_req_${Date.now()}`,
+      requestedAt,
+      status: 'pending',
+    };
+
+    // Always write to localStorage first — this is the primary cross-tab store
+    const existing = JSON.parse(localStorage.getItem('sams_key_requests') || '[]') as ZonalKeyRequest[];
+    existing.unshift(keyReq);
+    localStorage.setItem('sams_key_requests', JSON.stringify(existing));
+
+    // Also try to persist to Firestore (secondary)
+    try {
+      await setDoc(doc(keyRequestsCol, keyReq.id), keyReq);
+    } catch { /* Firestore unavailable – localStorage is the source of truth */ }
+
+    // Broadcast an official system Notice targeted to zonal_admin
+    const notice: Notice = {
+      id: `notice_key_req_${Date.now()}`,
+      title: `🔑 [KEY REQUEST] ${req.principalName} requested Zonal Key for ${req.schoolName}`,
+      body: `Principal: ${req.principalName}\nSchool: ${req.schoolName} (${req.censusCode})\nEmail: ${req.principalEmail}\nPhone: ${req.principalPhone}\nSLEAS ID: ${req.sleasNumber}\nNIC: ${req.nicNumber}\n\nPlease review and approve key dispatch in the Zonal Command Center.`,
+      date: new Date().toISOString(),
+      category: 'Zonal Request',
+      targetRole: 'zonal_admin',
+      authorName: req.principalName,
+      authorRole: 'principal',
+      priority: 'urgent',
+    };
+
+    // Always write notice to localStorage too
+    const existingNotices = JSON.parse(localStorage.getItem('sams_notices') || '[]') as Notice[];
+    existingNotices.unshift(notice);
+    localStorage.setItem('sams_notices', JSON.stringify(existingNotices));
+
+    try {
+      await setDoc(doc(noticesCol, notice.id), notice);
+    } catch { /* Firestore unavailable */ }
+
+    return keyReq;
+  },
+
+  async getZonalKeyRequests(): Promise<ZonalKeyRequest[]> {
+    // Always start with localStorage (most up-to-date for same-origin cross-tab data)
+    const local: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+
+    try {
+      const snap = await getDocs(keyRequestsCol);
+      if (!snap.empty) {
+        const remote = snap.docs.map(d => d.data());
+        // Merge: prefer remote (Firestore has authoritative status), deduplicate by id
+        const merged = [...remote];
+        for (const localReq of local) {
+          if (!merged.find(r => r.id === localReq.id)) {
+            merged.unshift(localReq);
+          }
+        }
+        return merged.sort((a, b) => b.id.localeCompare(a.id));
+      }
+    } catch { /* Firestore unavailable */ }
+
+    return local;
+  },
+
+  async updateZonalKeyRequestStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
+    // Always update localStorage
+    const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+    const updated = existing.map(r => r.id === id ? { ...r, status } : r);
+    localStorage.setItem('sams_key_requests', JSON.stringify(updated));
+
+    try {
+      await setDoc(doc(keyRequestsCol, id), { status }, { merge: true });
+    } catch { /* Firestore unavailable */ }
+  },
+
+  async deleteZonalKeyRequest(id: string): Promise<void> {
+    const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+    localStorage.setItem('sams_key_requests', JSON.stringify(existing.filter(r => r.id !== id)));
+    try {
+      await deleteDoc(doc(keyRequestsCol, id));
+    } catch { /* Firestore unavailable */ }
+  },
+
+  async deleteNotice(id: string): Promise<void> {
+    const existing: Notice[] = JSON.parse(localStorage.getItem('sams_notices') || '[]');
+    localStorage.setItem('sams_notices', JSON.stringify(existing.filter(n => n.id !== id)));
+    try {
+      await deleteDoc(doc(noticesCol, id));
+    } catch { /* Firestore unavailable */ }
+  },
+};
