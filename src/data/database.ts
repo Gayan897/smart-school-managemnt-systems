@@ -724,6 +724,8 @@ export const databaseService = {
       schoolName: req.schoolName || '',
       requestedAt,
       status: 'pending',
+      ...(req.nicFrontImage ? { nicFrontImage: req.nicFrontImage } : {}),
+      ...(req.nicBackImage  ? { nicBackImage:  req.nicBackImage  } : {}),
     };
 
     // 1. Write to Firestore key_requests collection

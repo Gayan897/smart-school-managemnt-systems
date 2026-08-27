@@ -45,6 +45,10 @@ export default function SignupScreen() {
   const [reqSleasNumber, setReqSleasNumber] = useState('');
   const [reqNicNumber, setReqNicNumber] = useState('');
   const [reqSchoolCode, setReqSchoolCode] = useState('10421');
+  const [reqNicFront, setReqNicFront] = useState<string>(''); // base64 compressed
+  const [reqNicBack, setReqNicBack]  = useState<string>(''); // base64 compressed
+  const [nicFrontLoading, setNicFrontLoading] = useState(false);
+  const [nicBackLoading, setNicBackLoading]  = useState(false);
   const [requestingKey, setRequestingKey] = useState(false);
   const [requestSuccessMsg, setRequestSuccessMsg] = useState('');
   const [modalError, setModalError] = useState('');
@@ -81,11 +85,71 @@ export default function SignupScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Compress image to base64 JPEG ≤ 200KB using canvas
+  async function compressImage(file: File, maxSizeKB = 200): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+          // Scale down if too large
+          const MAX_DIM = 1024;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, width, height);
+          // Reduce quality until under maxSizeKB
+          let quality = 0.85;
+          let dataUrl = canvas.toDataURL('image/jpeg', quality);
+          while (dataUrl.length > maxSizeKB * 1024 * 1.37 && quality > 0.2) {
+            quality -= 0.1;
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+          resolve(dataUrl);
+        };
+        img.onerror = reject;
+        img.src = ev.target!.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleNicImage(side: 'front' | 'back', file: File) {
+    if (!file.type.startsWith('image/')) {
+      setModalError('Please select a valid image file (JPG, PNG).');
+      return;
+    }
+    if (side === 'front') setNicFrontLoading(true);
+    else setNicBackLoading(true);
+    try {
+      const compressed = await compressImage(file);
+      if (side === 'front') setReqNicFront(compressed);
+      else setReqNicBack(compressed);
+    } catch {
+      setModalError('Failed to process image. Please try another file.');
+    } finally {
+      if (side === 'front') setNicFrontLoading(false);
+      else setNicBackLoading(false);
+    }
+  }
+
   async function handleSendKeyRequest(e: React.FormEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (!reqPrincipalName.trim() || !reqPrincipalEmail.trim() || !reqSchoolCode) {
       setModalError('Please fill in all required key request details.');
+      return;
+    }
+    if (!reqNicFront || !reqNicBack) {
+      setModalError('Please upload both front and back photos of your NIC.');
       return;
     }
     setRequestingKey(true);
@@ -101,6 +165,8 @@ export default function SignupScreen() {
         nicNumber: reqNicNumber.trim(),
         censusCode: reqSchoolCode,
         schoolName: sch?.name || 'Government School',
+        nicFrontImage: reqNicFront,
+        nicBackImage: reqNicBack,
       });
       setRequestSuccessMsg(`✅ Request submitted successfully! The Homagama / Colombo Zonal Education Office and Admin have been notified.`);
     } catch (err: unknown) {
@@ -578,6 +644,107 @@ export default function SignupScreen() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* NIC Image Upload */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label className="form-label" style={{ fontSize: '11px', marginBottom: '8px', display: 'block' }}>
+                    🪪 NIC Verification Photos * <span style={{ color: '#6b7280', fontWeight: 400 }}>(Front &amp; Back — Required)</span>
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {/* NIC Front */}
+                    <div>
+                      <div
+                        style={{
+                          border: `2px dashed ${reqNicFront ? '#10b981' : '#7c3aed'}`,
+                          borderRadius: '8px',
+                          padding: '10px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          background: reqNicFront ? 'rgba(16,185,129,0.06)' : 'rgba(124,58,237,0.04)',
+                          position: 'relative',
+                          transition: 'all 0.2s',
+                          minHeight: '90px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        onClick={() => document.getElementById('nic-front-input')?.click()}
+                      >
+                        {nicFrontLoading ? (
+                          <span className="spinner spinner-sm" />
+                        ) : reqNicFront ? (
+                          <>
+                            <img src={reqNicFront} alt="NIC Front" style={{ width: '100%', maxHeight: '70px', objectFit: 'cover', borderRadius: '4px', marginBottom: '4px' }} />
+                            <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 700 }}>✅ Front Uploaded</span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: '22px', marginBottom: '4px' }}>📷</span>
+                            <span style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 600 }}>NIC Front Side</span>
+                            <span style={{ fontSize: '9px', color: '#9ca3af' }}>Tap to upload</span>
+                          </>
+                        )}
+                        <input
+                          id="nic-front-input"
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          style={{ display: 'none' }}
+                          onChange={e => e.target.files?.[0] && handleNicImage('front', e.target.files[0])}
+                        />
+                      </div>
+                    </div>
+
+                    {/* NIC Back */}
+                    <div>
+                      <div
+                        style={{
+                          border: `2px dashed ${reqNicBack ? '#10b981' : '#7c3aed'}`,
+                          borderRadius: '8px',
+                          padding: '10px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          background: reqNicBack ? 'rgba(16,185,129,0.06)' : 'rgba(124,58,237,0.04)',
+                          position: 'relative',
+                          transition: 'all 0.2s',
+                          minHeight: '90px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        onClick={() => document.getElementById('nic-back-input')?.click()}
+                      >
+                        {nicBackLoading ? (
+                          <span className="spinner spinner-sm" />
+                        ) : reqNicBack ? (
+                          <>
+                            <img src={reqNicBack} alt="NIC Back" style={{ width: '100%', maxHeight: '70px', objectFit: 'cover', borderRadius: '4px', marginBottom: '4px' }} />
+                            <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 700 }}>✅ Back Uploaded</span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: '22px', marginBottom: '4px' }}>📷</span>
+                            <span style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 600 }}>NIC Back Side</span>
+                            <span style={{ fontSize: '9px', color: '#9ca3af' }}>Tap to upload</span>
+                          </>
+                        )}
+                        <input
+                          id="nic-back-input"
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          style={{ display: 'none' }}
+                          onChange={e => e.target.files?.[0] && handleNicImage('back', e.target.files[0])}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '9px', color: '#9ca3af', margin: '5px 0 0', textAlign: 'center' }}>
+                    Images are compressed and securely stored for admin verification only.
+                  </p>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>

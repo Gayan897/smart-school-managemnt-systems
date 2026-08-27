@@ -332,6 +332,42 @@ export default function ZonalAdminScreen() {
                     <div>📱 Mobile: <strong style={{ color: 'var(--text-color)' }}>{req.principalPhone}</strong></div>
                     <div>🪪 SLEAS ID: <code>{req.sleasNumber}</code> • NIC: <code>{req.nicNumber}</code></div>
                   </div>
+
+                  {/* NIC Images */}
+                  {(req.nicFrontImage || req.nicBackImage) && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#7c3aed', marginBottom: '6px' }}>🪪 NIC Verification Photos:</div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {req.nicFrontImage && (
+                          <div style={{ flex: 1 }}>
+                            <a href={req.nicFrontImage} target="_blank" rel="noopener noreferrer" title="View NIC Front (full size)">
+                              <img
+                                src={req.nicFrontImage}
+                                alt="NIC Front"
+                                style={{ width: '100%', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(124,58,237,0.3)', cursor: 'zoom-in' }}
+                              />
+                              <div style={{ fontSize: '9px', color: '#7c3aed', textAlign: 'center', marginTop: '2px', fontWeight: 600 }}>Front Side 🔍</div>
+                            </a>
+                          </div>
+                        )}
+                        {req.nicBackImage && (
+                          <div style={{ flex: 1 }}>
+                            <a href={req.nicBackImage} target="_blank" rel="noopener noreferrer" title="View NIC Back (full size)">
+                              <img
+                                src={req.nicBackImage}
+                                alt="NIC Back"
+                                style={{ width: '100%', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(124,58,237,0.3)', cursor: 'zoom-in' }}
+                              />
+                              <div style={{ fontSize: '9px', color: '#7c3aed', textAlign: 'center', marginTop: '2px', fontWeight: 600 }}>Back Side 🔍</div>
+                            </a>
+                          </div>
+                        )}
+                        {!req.nicFrontImage && !req.nicBackImage && (
+                          <div style={{ fontSize: '10px', color: '#9ca3af', fontStyle: 'italic' }}>No NIC images submitted</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
@@ -340,7 +376,7 @@ export default function ZonalAdminScreen() {
                     style={{ flex: 1, background: '#7c3aed', borderColor: '#7c3aed', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                     onClick={() => handleApproveKeyRequest(req)}
                   >
-                    <ThumbsUp size={13} /> Approve & Auto-Dispatch Key
+                    <ThumbsUp size={13} /> Approve &amp; Auto-Dispatch Key
                   </button>
                   <button
                     className="btn btn-sm"

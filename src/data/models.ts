@@ -287,6 +287,8 @@ export interface ZonalKeyRequest {
   schoolName: string;
   requestedAt: string;
   status: 'pending' | 'approved' | 'rejected';
+  nicFrontImage?: string; // base64 compressed JPEG data URL
+  nicBackImage?: string;  // base64 compressed JPEG data URL
 }
 
 export interface ParentNotification {
