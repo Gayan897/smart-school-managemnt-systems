@@ -43,6 +43,7 @@ export default function SignupScreen() {
   const [reqSchoolCode, setReqSchoolCode] = useState('10421');
   const [requestingKey, setRequestingKey] = useState(false);
   const [requestSuccessMsg, setRequestSuccessMsg] = useState('');
+  const [modalError, setModalError] = useState('');
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,12 +73,14 @@ export default function SignupScreen() {
 
   async function handleSendKeyRequest(e: React.FormEvent) {
     e.preventDefault();
+    e.stopPropagation();
     if (!reqPrincipalName.trim() || !reqPrincipalEmail.trim() || !reqSchoolCode) {
-      setError('Please fill in all key request details.');
+      setModalError('Please fill in all required key request details.');
       return;
     }
     setRequestingKey(true);
     setRequestSuccessMsg('');
+    setModalError('');
     try {
       const sch = schools.find(s => s.censusCode === reqSchoolCode);
       await databaseService.requestZonalMasterKey({
@@ -89,10 +92,10 @@ export default function SignupScreen() {
         censusCode: reqSchoolCode,
         schoolName: sch?.name || 'Government School',
       });
-      setRequestSuccessMsg(`✅ Request submitted! Homagama / Colombo Zonal Education Office has been notified. An official email dispatch will be sent to ${reqPrincipalEmail.trim()}.`);
+      setRequestSuccessMsg(`✅ Request submitted successfully! The Homagama / Colombo Zonal Education Office and Admin have been notified.`);
     } catch (err: unknown) {
       console.error('Failed to submit key request:', err);
-      setError(err instanceof Error ? err.message : 'Failed to submit key request. Please check your connection.');
+      setModalError(err instanceof Error ? err.message : 'Failed to submit key request. Please check your internet connection.');
     } finally {
       setRequestingKey(false);
     }
@@ -358,121 +361,6 @@ export default function SignupScreen() {
               </div>
             )}
 
-            {/* Request Zonal Key Modal */}
-            {showRequestModal && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
-                <div style={{ background: 'var(--bg-card, #ffffff)', width: '100%', maxWidth: '440px', borderRadius: '12px', padding: '24px', border: '1px solid var(--border-color)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h3 style={{ margin: 0, fontSize: '16px', color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Key size={18} /> Request Zonal Master Key from Admin
-                    </h3>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowRequestModal(false)}>
-                      <X size={16} />
-                    </button>
-                  </div>
-
-                  {requestSuccessMsg ? (
-                    <div style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', padding: '14px', borderRadius: '8px', fontSize: '13px', lineHeight: 1.5 }}>
-                      {requestSuccessMsg}
-                      <div style={{ marginTop: '16px' }}>
-                        <button type="button" className="btn btn-primary btn-sm" style={{ width: '100%' }} onClick={() => setShowRequestModal(false)}>
-                          Close & Return to Form
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleSendKeyRequest}>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: 1.4 }}>
-                        Submit your appointment details directly to the <strong>Homagama / Colombo Zonal Education Office</strong>. Once verified, the Zonal Admin will auto-dispatch your key.
-                      </p>
-
-                      <div className="form-group" style={{ marginBottom: '10px' }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Principal Full Name</label>
-                        <input
-                          className="form-control"
-                          placeholder="e.g. Dr. A. P. Perera"
-                          value={reqPrincipalName}
-                          onChange={e => setReqPrincipalName(e.target.value)}
-                          required
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ marginBottom: '10px' }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Official Email Address (To Receive Key)</label>
-                        <input
-                          type="email"
-                          className="form-control"
-                          placeholder="e.g. principal@school.moe.gov.lk"
-                          value={reqPrincipalEmail}
-                          onChange={e => setReqPrincipalEmail(e.target.value)}
-                          required
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ marginBottom: '10px' }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Mobile Phone Number (For SMS Notification)</label>
-                        <input
-                          type="tel"
-                          className="form-control"
-                          placeholder="e.g. +94 77 123 4567"
-                          value={reqPrincipalPhone}
-                          onChange={e => setReqPrincipalPhone(e.target.value)}
-                          required
-                        />
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '11px' }}>SLEAS ID</label>
-                          <input
-                            className="form-control"
-                            placeholder="e.g. SLEAS-982"
-                            value={reqSleasNumber}
-                            onChange={e => setReqSleasNumber(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '11px' }}>NIC Number</label>
-                          <input
-                            className="form-control"
-                            placeholder="e.g. 1978...V"
-                            value={reqNicNumber}
-                            onChange={e => setReqNicNumber(e.target.value)}
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div className="form-group" style={{ marginBottom: '16px' }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Target School</label>
-                        <select
-                          className="form-control"
-                          value={reqSchoolCode}
-                          onChange={e => setReqSchoolCode(e.target.value)}
-                        >
-                          {schools.map(s => (
-                            <option key={s.censusCode} value={s.censusCode}>
-                              {s.name} ({s.censusCode})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button type="submit" className="btn btn-primary btn-sm" style={{ flex: 1, background: '#7c3aed', borderColor: '#7c3aed' }} disabled={requestingKey}>
-                          {requestingKey ? <span className="spinner" /> : <><Send size={14} /> Send Request to Admin</>}
-                        </button>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowRequestModal(false)}>
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Zonal Admin Security Key */}
             {isZonalPortal && (
               <div style={{ background: 'rgba(124, 58, 237, 0.08)', border: '1px solid rgba(124, 58, 237, 0.3)', borderRadius: '8px', padding: '14px', marginBottom: '16px' }}>
@@ -550,6 +438,129 @@ export default function SignupScreen() {
           </div>
         </div>
       </div>
+
+      {/* Request Zonal Key Standalone Modal */}
+      {showRequestModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '16px' }}>
+          <div style={{ background: 'var(--bg-card, #ffffff)', width: '100%', maxWidth: '460px', borderRadius: '14px', padding: '24px', border: '1px solid var(--border-color)', boxShadow: '0 20px 40px rgba(0,0,0,0.35)', color: 'var(--text-main, #1e293b)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
+                <Key size={20} /> Request Zonal Master Key from Admin
+              </h3>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowRequestModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {modalError && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '14px', lineHeight: 1.4 }}>
+                {modalError}
+              </div>
+            )}
+
+            {requestSuccessMsg ? (
+              <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', padding: '16px', borderRadius: '10px', fontSize: '13px', lineHeight: 1.5 }}>
+                <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '6px' }}>Request Sent to Zonal Admin!</div>
+                {requestSuccessMsg}
+                <div style={{ marginTop: '16px' }}>
+                  <button type="button" className="btn btn-primary btn-sm" style={{ width: '100%', background: '#7c3aed', borderColor: '#7c3aed' }} onClick={() => setShowRequestModal(false)}>
+                    Close & Return to Registration
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSendKeyRequest}>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: 1.4 }}>
+                  Submit your appointment details directly to the <strong>Homagama / Colombo Zonal Education Office</strong>. The Admin will verify and dispatch your key.
+                </p>
+
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="form-label" style={{ fontSize: '11px' }}>Principal Full Official Name *</label>
+                  <input
+                    className="form-control"
+                    placeholder="e.g. Dr. A. P. Perera"
+                    value={reqPrincipalName}
+                    onChange={e => setReqPrincipalName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="form-label" style={{ fontSize: '11px' }}>Official Email Address (To Receive Key) *</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    placeholder="e.g. principal@school.moe.gov.lk"
+                    value={reqPrincipalEmail}
+                    onChange={e => setReqPrincipalEmail(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="form-label" style={{ fontSize: '11px' }}>Mobile Phone Number (For SMS Alert) *</label>
+                  <input
+                    type="tel"
+                    className="form-control"
+                    placeholder="e.g. 0771234567"
+                    value={reqPrincipalPhone}
+                    onChange={e => setReqPrincipalPhone(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '11px' }}>SLEAS / Service ID *</label>
+                    <input
+                      className="form-control"
+                      placeholder="e.g. SLEAS-982"
+                      value={reqSleasNumber}
+                      onChange={e => setReqSleasNumber(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '11px' }}>NIC Number *</label>
+                    <input
+                      className="form-control"
+                      placeholder="e.g. 1978...V"
+                      value={reqNicNumber}
+                      onChange={e => setReqNicNumber(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label" style={{ fontSize: '11px' }}>Select Target School *</label>
+                  <select
+                    className="form-control"
+                    value={reqSchoolCode}
+                    onChange={e => setReqSchoolCode(e.target.value)}
+                    required
+                  >
+                    {schools.map(s => (
+                      <option key={s.censusCode} value={s.censusCode}>
+                        {s.name} ({s.zone} Zone - {s.censusCode})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="submit" className="btn btn-primary btn-sm" style={{ flex: 1, background: '#7c3aed', borderColor: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} disabled={requestingKey}>
+                    {requestingKey ? <span className="spinner spinner-sm" /> : <><Send size={14} /> Send Request to Admin</>}
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowRequestModal(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
