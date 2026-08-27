@@ -726,10 +726,12 @@ export const databaseService = {
     };
 
     // 1. Write to Firestore key_requests collection
+    let firestoreError: Error | null = null;
     try {
       await setDoc(doc(keyRequestsCol, keyReq.id), keyReq);
     } catch (err) {
       console.error('[SAMS] Error saving key request to Firestore:', err);
+      firestoreError = err instanceof Error ? err : new Error(String(err));
     }
 
     // 2. Broadcast an official system Notice targeted to zonal_admin
@@ -762,6 +764,16 @@ export const databaseService = {
       localStorage.setItem('sams_notices', JSON.stringify(existingNotices));
     } catch (e) {
       console.warn('[SAMS] LocalStorage cache write failed:', e);
+    }
+
+    if (firestoreError) {
+      const msg = firestoreError.message.toLowerCase();
+      if (msg.includes('permission') || msg.includes('insufficient')) {
+        throw new Error(
+          'Firebase permission denied. Please update Firestore security rules in Firebase Console to allow read/write.'
+        );
+      }
+      throw firestoreError;
     }
 
     return keyReq;
