@@ -647,7 +647,7 @@ export const databaseService = {
     }
   },
 
-  async verifyZonalPrincipalKey(censusCode: string, secretKey: string): Promise<{ valid: boolean; school?: GovernmentSchool; error?: string }> {
+  async verifyZonalPrincipalKey(censusCode: string, secretKey: string, skipRegisteredCheck = false): Promise<{ valid: boolean; school?: GovernmentSchool; error?: string }> {
     const schools = await this.getZonalSchools();
     const school = schools.find(s => s.censusCode === censusCode);
 
@@ -655,7 +655,7 @@ export const databaseService = {
       return { valid: false, error: 'School Census Code not found in Colombo District Registry.' };
     }
 
-    if (school.isRegistered && school.principalId) {
+    if (!skipRegisteredCheck && school.isRegistered && school.principalId) {
       return { valid: false, error: `A principal (${school.principalName || 'Registered User'}) has already been verified for ${school.name}.` };
     }
 

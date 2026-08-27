@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight, ArrowLeft, Mail, Smartphone, Send, X, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
@@ -11,9 +11,11 @@ import landingBg from '../assets/landing_bg.png';
 export default function SignupScreen() {
   const { login, logout, language } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('teacher');
   const [isZonalPortal, setIsZonalPortal] = useState(false);
@@ -32,6 +34,8 @@ export default function SignupScreen() {
 
   // Magic Link Dispatch Invitation
   const [isMagicInvite, setIsMagicInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState(''); // email from invite URL
+  const [inviteSchoolName, setInviteSchoolName] = useState('');
 
   // Request Zonal Master Key Modal State
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -49,26 +53,32 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const qCensusCode = searchParams.get('censusCode');
+    const qKey = searchParams.get('key');
+    const qEmail = searchParams.get('email');
+
     databaseService.getZonalSchools().then(data => {
       setSchools(data);
 
-      // Check URL search parameters for magic invitation link
-      const params = new URLSearchParams(window.location.search);
-      const qCensusCode = params.get('censusCode');
-      const qKey = params.get('key');
-      const qInvite = params.get('invite');
-
       if (qCensusCode && qKey) {
+        const matchedSchool = data.find(s => s.censusCode === qCensusCode);
         setSelectedSchoolCode(qCensusCode);
         setReqSchoolCode(qCensusCode);
-        setZonalSecretKey(qKey);
+        setZonalSecretKey(qKey.toUpperCase());
         setRole('principal');
         setIsMagicInvite(true);
+        if (matchedSchool) setInviteSchoolName(matchedSchool.name);
+        if (qEmail) {
+          setInviteEmail(qEmail);
+          setEmail(qEmail);
+          setReqPrincipalEmail(qEmail);
+        }
       } else if (data.length > 0) {
         setSelectedSchoolCode(data[0].censusCode);
         setReqSchoolCode(data[0].censusCode);
       }
     }).catch(err => console.error('Failed to load schools:', err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSendKeyRequest(e: React.FormEvent) {
@@ -142,7 +152,8 @@ export default function SignupScreen() {
         }
 
         // Verify Zonal Key against Database
-        const ver = await databaseService.verifyZonalPrincipalKey(selectedSchoolCode, zonalSecretKey.trim());
+        // If this is a magic invite link, skip the isRegistered check (allow re-registration for same school)
+        const ver = await databaseService.verifyZonalPrincipalKey(selectedSchoolCode, zonalSecretKey.trim(), isMagicInvite);
         if (!ver.valid) {
           throw new Error(ver.error || 'Zonal Verification Failed.');
         }
@@ -160,6 +171,7 @@ export default function SignupScreen() {
         username: username.trim(),
         password,
         name: name.trim(),
+        email: email.trim() || inviteEmail || undefined,
         role,
         schoolCensusCode: role === 'zonal_admin' ? 'ZONAL-MOE' : selectedSchoolCode,
         schoolName: role === 'zonal_admin' ? 'Colombo / Homagama Zonal Education Office' : (selectedSchool?.name || 'Mahinda Rajapaksha College'),
@@ -246,13 +258,16 @@ export default function SignupScreen() {
           )}
 
           {isMagicInvite && (
-            <div style={{ background: 'rgba(124, 58, 237, 0.12)', border: '1px solid rgba(124, 58, 237, 0.3)', color: '#7c3aed', padding: '12px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <ShieldCheck size={22} style={{ flexShrink: 0 }} />
-              <div>
-                <div style={{ fontWeight: 700 }}>Verified Zonal Invitation Link</div>
-                <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '2px' }}>
-                  Your Zonal Master Security Key (<code>{zonalSecretKey}</code>) was automatically verified from official dispatch.
-                </div>
+            <div style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.13) 0%, rgba(2,132,199,0.09) 100%)', border: '2px solid rgba(124, 58, 237, 0.4)', color: '#7c3aed', padding: '14px 16px', borderRadius: '10px', marginBottom: '18px', fontSize: '13px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <ShieldCheck size={24} style={{ flexShrink: 0 }} />
+                <div style={{ fontWeight: 800, fontSize: '14px' }}>✅ Official Zonal Invitation Link Detected</div>
+              </div>
+              <div style={{ fontSize: '12px', opacity: 0.9, lineHeight: 1.5 }}>
+                <div>🏛️ School: <strong>{inviteSchoolName || selectedSchoolCode}</strong></div>
+                <div>🔑 Key: <code style={{ background: 'rgba(124,58,237,0.12)', padding: '1px 5px', borderRadius: '4px' }}>{zonalSecretKey}</code> <span style={{ color: '#10b981', fontWeight: 700 }}>AUTO-VERIFIED</span></div>
+                {inviteEmail && <div>📧 Dispatched to: <strong>{inviteEmail}</strong></div>}
+                <div style={{ marginTop: '6px', fontWeight: 600 }}>Fill in your Name, Username and Password below to activate your Principal account.</div>
               </div>
             </div>
           )}
@@ -303,38 +318,42 @@ export default function SignupScreen() {
 
             {/* Principal Specific Security Verification */}
             {!isZonalPortal && role === 'principal' && (
-              <div style={{ background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.3)', borderRadius: '8px', padding: '14px', marginBottom: '16px' }}>
-                <div style={{ fontWeight: 700, fontSize: '13px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-                  <ShieldCheck size={16} /> Principal Zonal Identity Verification
+              <div style={{ background: isMagicInvite ? 'rgba(16,185,129,0.06)' : 'rgba(2, 132, 199, 0.08)', border: `1px solid ${isMagicInvite ? 'rgba(16,185,129,0.35)' : 'rgba(2, 132, 199, 0.3)'}`, borderRadius: '8px', padding: '14px', marginBottom: '16px' }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: isMagicInvite ? '#10b981' : '#0284c7', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                  <ShieldCheck size={16} /> {isMagicInvite ? '✅ Zonal Key — Pre-verified from Invite Link' : 'Principal Zonal Identity Verification'}
                 </div>
                 <div className="form-group" style={{ marginBottom: '6px' }}>
-                  <label className="form-label" style={{ fontSize: '11px' }}>Zonal Master Security Key (Issued by Zonal Office)</label>
+                  <label className="form-label" style={{ fontSize: '11px' }}>Zonal Master Security Key {isMagicInvite && <span style={{ color: '#10b981', fontWeight: 700 }}>(Auto-Filled — Do Not Edit)</span>}</label>
                   <input
                     className="form-control"
                     placeholder="e.g. HMG-MRC-8942"
                     value={zonalSecretKey}
-                    onChange={e => setZonalSecretKey(e.target.value)}
+                    onChange={e => !isMagicInvite && setZonalSecretKey(e.target.value)}
+                    readOnly={isMagicInvite}
+                    style={isMagicInvite ? { background: 'rgba(16,185,129,0.08)', color: '#059669', fontWeight: 700, cursor: 'not-allowed' } : {}}
                     required
                   />
                 </div>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ color: '#7c3aed', fontWeight: 600, fontSize: '11px', padding: '2px 0', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => {
-                      setShowRequestModal(true);
-                      setReqPrincipalName(name);
-                      setReqSleasNumber(sleasNumber);
-                      setReqNicNumber(nicNumber);
-                      setReqSchoolCode(selectedSchoolCode);
-                      setRequestSuccessMsg('');
-                    }}
-                  >
-                    <Key size={12} /> Don't have a Zonal Master Key? Request Key from Admin →
-                  </button>
-                </div>
+                {!isMagicInvite && (
+                  <div style={{ marginBottom: '12px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ color: '#7c3aed', fontWeight: 600, fontSize: '11px', padding: '2px 0', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      onClick={() => {
+                        setShowRequestModal(true);
+                        setReqPrincipalName(name);
+                        setReqSleasNumber(sleasNumber);
+                        setReqNicNumber(nicNumber);
+                        setReqSchoolCode(selectedSchoolCode);
+                        setRequestSuccessMsg('');
+                      }}
+                    >
+                      <Key size={12} /> Don't have a Zonal Master Key? Request Key from Admin →
+                    </button>
+                  </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
@@ -392,6 +411,19 @@ export default function SignupScreen() {
             </div>
 
             <div className="form-group">
+              <label className="form-label">Email Address {role === 'principal' && <span style={{ color: '#6b7280', fontSize: '11px' }}>(Official Contact)</span>}</label>
+              <input
+                id="signup-email"
+                className="form-control"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="form-group">
               <label className="form-label">{t('username', language)}</label>
               <input
                 id="signup-username"
@@ -422,11 +454,11 @@ export default function SignupScreen() {
               id="signup-submit"
               type="submit"
               className="btn btn-primary btn-lg"
-              style={{ width: '100%', marginTop: '8px' }}
+              style={{ width: '100%', marginTop: '8px', background: isMagicInvite ? 'linear-gradient(135deg, #7c3aed, #0284c7)' : undefined }}
               disabled={loading}
             >
               {loading ? <span className="spinner" /> : null}
-              {isZonalPortal ? 'Register Zonal Officer' : role === 'principal' ? 'Verify & Register Principal' : 'Register Teacher'}
+              {isZonalPortal ? 'Register Zonal Officer' : role === 'principal' ? (isMagicInvite ? '🔑 Activate Principal Account' : 'Verify & Register Principal') : 'Register Teacher'}
             </button>
           </form>
 

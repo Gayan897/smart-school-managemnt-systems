@@ -103,6 +103,7 @@ export interface User {
   username: string;
   password?: string; // Optional for security on client, though Firestore has it
   name: string;
+  email?: string;
   role: UserRole;
   schoolCensusCode?: string;
   schoolName?: string;
