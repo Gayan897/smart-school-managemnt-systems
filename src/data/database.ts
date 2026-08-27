@@ -453,7 +453,7 @@ export const databaseService = {
   ): Unsubscribe {
     const mockNoticeIds = new Set(['n1', 'n2', 'n3', 'n4']);
     return onSnapshot(
-      query(noticesCol, orderBy('date', 'desc')),
+      noticesCol,
       (snap) => {
         const notices: Notice[] = [];
         for (const d of snap.docs) {
@@ -462,6 +462,7 @@ export const databaseService = {
             notices.push({ ...data, id: d.id });
           }
         }
+        notices.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
         callback(notices);
       },
       (err) => {
@@ -741,7 +742,7 @@ export const databaseService = {
       body: `Principal: ${keyReq.principalName}\nSchool: ${keyReq.schoolName} (${keyReq.censusCode})\nEmail: ${keyReq.principalEmail}\nPhone: ${keyReq.principalPhone}\nSLEAS ID: ${keyReq.sleasNumber}\nNIC: ${keyReq.nicNumber}\n\nPlease review and approve key dispatch in the Zonal Command Center.`,
       date: new Date().toISOString(),
       category: 'Zonal Request',
-      targetRole: 'zonal_admin',
+      targetRole: 'all',
       authorName: keyReq.principalName,
       authorRole: 'principal',
       priority: 'urgent',
