@@ -261,13 +261,15 @@ export interface TimetableSlot {
   teacher: string;
 }
 
+export type NoticeTargetRole = 'all' | 'teacher' | 'principal' | 'zonal_admin' | 'parent' | 'student';
+
 export interface Notice {
   id: string;
   title: string;
   body: string;
   date: string; // ISO String
   category: string;
-  targetRole?: 'all' | 'teacher' | 'principal' | 'zonal_admin';
+  targetRole?: NoticeTargetRole;
   authorName?: string;
   authorRole?: UserRole;
   priority?: 'normal' | 'high' | 'urgent';

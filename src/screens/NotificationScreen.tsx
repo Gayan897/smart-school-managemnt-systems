@@ -7,7 +7,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { Notice } from '../data/models';
+import type { Notice, NoticeTargetRole } from '../data/models';
 
 export default function NotificationScreen() {
   const { user, language } = useAuth();
@@ -27,7 +27,7 @@ export default function NotificationScreen() {
     title: '',
     body: '',
     category: 'General',
-    targetRole: 'all' as 'all' | 'teacher' | 'principal',
+    targetRole: 'all' as NoticeTargetRole,
     priority: 'normal' as 'normal' | 'high' | 'urgent',
   });
 

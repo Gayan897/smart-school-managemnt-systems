@@ -25,6 +25,7 @@ import type {
   SchoolClass,
   LeaveRequest,
   AttendanceRecord,
+  AttendanceStatus,
   TermMark,
   TimetableSlot,
   Notice,
@@ -35,7 +36,7 @@ import type {
 } from './models';
 
 // Helpers to get collection references with types
-const getColRef = <T>(collectionName: string) => {
+const getColRef = <T extends DocumentData>(collectionName: string) => {
   return collection(db, collectionName) as CollectionReference<T, DocumentData>;
 };
 
@@ -523,12 +524,9 @@ export const databaseService = {
   // ─── Proxy Assignment Services ────────────────────────────────────────────
 
   async getProxyAssignments(date?: string): Promise<ProxyAssignment[]> {
-    let q;
-    if (date) {
-      q = query(proxyAssignmentsCol, where('date', '==', date));
-    } else {
-      q = query(proxyAssignmentsCol);
-    }
+    const q = date
+      ? query(proxyAssignmentsCol, where('date', '==', date))
+      : query(proxyAssignmentsCol);
     const snapshot = await getDocs(q);
     const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
     return list.sort((a, b) => a.period - b.period);
@@ -594,12 +592,9 @@ export const databaseService = {
     date?: string,
     onError?: (err: Error) => void
   ): Unsubscribe {
-    let q;
-    if (date) {
-      q = query(proxyAssignmentsCol, where('date', '==', date));
-    } else {
-      q = query(proxyAssignmentsCol);
-    }
+    const q = date
+      ? query(proxyAssignmentsCol, where('date', '==', date))
+      : query(proxyAssignmentsCol);
 
     return onSnapshot(
       q,
@@ -797,14 +792,6 @@ export const databaseService = {
     localStorage.setItem('sams_key_requests', JSON.stringify(existing.filter(r => r.id !== id)));
     try {
       await deleteDoc(doc(keyRequestsCol, id));
-    } catch { /* Firestore unavailable */ }
-  },
-
-  async deleteNotice(id: string): Promise<void> {
-    const existing: Notice[] = JSON.parse(localStorage.getItem('sams_notices') || '[]');
-    localStorage.setItem('sams_notices', JSON.stringify(existing.filter(n => n.id !== id)));
-    try {
-      await deleteDoc(doc(noticesCol, id));
     } catch { /* Firestore unavailable */ }
   },
 };

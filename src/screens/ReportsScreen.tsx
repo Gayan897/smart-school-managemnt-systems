@@ -90,6 +90,39 @@ export default function ReportsScreen() {
     );
   }
 
+  const attByStatus = {
+    present: attendance.filter(a => a.status === 'present').length,
+    absent: attendance.filter(a => a.status === 'absent').length,
+    late: attendance.filter(a => a.status === 'late').length,
+    excused: attendance.filter(a => a.status === 'excused').length,
+  };
+
+  const attPieData = [
+    { name: t('present', language), value: attByStatus.present, color: 'var(--success)' },
+    { name: t('absent', language), value: attByStatus.absent, color: 'var(--danger)' },
+    { name: t('late', language), value: attByStatus.late, color: 'var(--warning)' },
+    { name: t('excused', language), value: attByStatus.excused, color: 'var(--info)' },
+  ].filter(d => d.value > 0);
+
+  const leaveTypes: ('casual' | 'medical' | 'annual' | 'duty')[] = ['casual', 'medical', 'annual', 'duty'];
+  const leaveByType = leaveTypes.map(type => ({
+    type: type.toUpperCase(),
+    approved: leaveReqs.filter(r => r.type === type && r.status === 'approved').length,
+    pending: leaveReqs.filter(r => r.type === type && r.status === 'pending').length,
+    rejected: leaveReqs.filter(r => r.type === type && r.status === 'rejected').length,
+  }));
+
+  const subjectMap = marks.reduce((acc, m) => {
+    if (!acc[m.subject]) acc[m.subject] = [];
+    acc[m.subject].push(m.marks);
+    return acc;
+  }, {} as Record<string, number[]>);
+
+  const perfData = Object.entries(subjectMap).map(([subject, scores]) => ({
+    subject,
+    avg: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+  }));
+
   return (
     <div className="page">
       <div className="page-header">
