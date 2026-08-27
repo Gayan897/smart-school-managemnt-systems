@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Sparkles, Activity } from 'lucide-react';
+import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Sparkles, Activity, Key, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { Notice, Student, Teacher, LeaveRequest, AttendanceRecord, ProxyAssignment } from '../data/models';
+import type { Notice, Student, Teacher, LeaveRequest, AttendanceRecord, ProxyAssignment, ZonalKeyRequest } from '../data/models';
 
 export default function DashboardScreen() {
   const { user, language } = useAuth();
@@ -14,6 +14,7 @@ export default function DashboardScreen() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [proxyAssignments, setProxyAssignments] = useState<ProxyAssignment[]>([]);
+  const [pendingKeyRequests, setPendingKeyRequests] = useState<ZonalKeyRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,10 +47,16 @@ export default function DashboardScreen() {
       setProxyAssignments(data);
     });
 
+    // Real-time zonal key requests subscription for zonal admin
+    const unsubKeyReqs = databaseService.subscribeToZonalKeyRequests((requests) => {
+      setPendingKeyRequests(requests.filter(r => r.status === 'pending'));
+    });
+
     return () => {
       unsubAtt();
       unsubNotices();
       unsubProxy();
+      unsubKeyReqs();
     };
   }, []);
 
@@ -127,6 +134,48 @@ export default function DashboardScreen() {
           </div>
         </div>
       </div>
+
+      {/* Zonal Admin Pending Key Requests Alert Banner */}
+      {user?.role === 'zonal_admin' && pendingKeyRequests.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.18) 0%, rgba(76, 29, 149, 0.25) 100%)',
+          border: '2px solid #7c3aed',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          boxShadow: '0 4px 20px rgba(124, 58, 237, 0.15)',
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#a78bfa', fontSize: '15px' }}>
+              <Key size={18} color="#c084fc" />
+              🔔 {pendingKeyRequests.length} Pending Principal Zonal Key {pendingKeyRequests.length === 1 ? 'Request' : 'Requests'} Waiting for Approval!
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              {pendingKeyRequests.map(r => `${r.principalName} (${r.schoolName})`).join(' • ')}
+            </div>
+          </div>
+          <Link
+            to="/admin"
+            className="btn btn-primary btn-sm"
+            style={{
+              background: '#7c3aed',
+              borderColor: '#7c3aed',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Shield size={14} />
+            Open Zonal Admin Panel
+            <ArrowRight size={14} />
+          </Link>
+        </div>
+      )}
 
       {/* Teacher Smart Substitute Active Duty Banner */}
       {myDutiesToday.length > 0 && (
