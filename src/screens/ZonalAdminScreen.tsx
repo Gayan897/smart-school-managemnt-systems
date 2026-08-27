@@ -41,12 +41,21 @@ export default function ZonalAdminScreen() {
   useEffect(() => {
     loadSchools();
 
-    // Listen for localStorage changes from other tabs (e.g. principal submitting key request)
-    function handleStorageChange(e: StorageEvent) {
-      if (e.key === 'sams_key_requests' || e.key === 'sams_notices') {
-        loadSchools();
-      }
-    }
+    // 1. Real-time listener for key requests
+    const unsubKeyRequests = databaseService.subscribeToZonalKeyRequests(
+      (reqs) => {
+        setKeyRequests(reqs);
+      },
+      (err) => console.error('[ZonalAdmin] Key requests subscription error:', err)
+    );
+
+    // 2. Real-time listener for notices
+    const unsubNotices = databaseService.subscribeToNotices(
+      (notices) => {
+        setRecentNotices(notices.filter(n => n.authorRole === 'zonal_admin' || n.category === 'Zonal Request'));
+      },
+      (err) => console.error('[ZonalAdmin] Notices subscription error:', err)
+    );
 
     // Also reload when admin tab is re-focused
     function handleVisibilityChange() {
@@ -55,11 +64,11 @@ export default function ZonalAdminScreen() {
       }
     }
 
-    window.addEventListener('storage', handleStorageChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      unsubKeyRequests();
+      unsubNotices();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);

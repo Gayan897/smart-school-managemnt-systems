@@ -90,8 +90,9 @@ export default function SignupScreen() {
         schoolName: sch?.name || 'Government School',
       });
       setRequestSuccessMsg(`✅ Request submitted! Homagama / Colombo Zonal Education Office has been notified. An official email dispatch will be sent to ${reqPrincipalEmail.trim()}.`);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to submit key request:', err);
+      setError(err instanceof Error ? err.message : 'Failed to submit key request. Please check your connection.');
     } finally {
       setRequestingKey(false);
     }

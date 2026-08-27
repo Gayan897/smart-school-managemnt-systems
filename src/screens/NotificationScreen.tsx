@@ -33,6 +33,7 @@ export default function NotificationScreen() {
 
   const categories = [
     { value: 'all', label: t('all', language) },
+    { value: 'Zonal Request', label: '🔑 Zonal Key Request' },
     { value: 'Leave Request', label: t('categoryLeaveRequest', language) },
     { value: 'General', label: t('categoryGeneral', language) },
     { value: 'Academic', label: t('categoryAcademic', language) },
@@ -413,6 +414,18 @@ export default function NotificationScreen() {
                     >
                       <FileText size={13} />
                       <span>{t('leave', language)} Screen</span>
+                      <ArrowRight size={13} />
+                    </Link>
+                  )}
+
+                  {notice.category === 'Zonal Request' && (
+                    <Link
+                      to="/admin"
+                      className="btn btn-primary btn-sm"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 10px', background: '#7c3aed', borderColor: '#7c3aed' }}
+                    >
+                      <Shield size={13} />
+                      <span>Open in Zonal Command Center</span>
                       <ArrowRight size={13} />
                     </Link>
                   )}

@@ -713,85 +713,131 @@ export const databaseService = {
       hour: '2-digit', minute: '2-digit', hour12: true
     });
     const keyReq: ZonalKeyRequest = {
-      ...req,
       id: `key_req_${Date.now()}`,
+      principalName: req.principalName || '',
+      principalEmail: req.principalEmail || '',
+      principalPhone: req.principalPhone || '',
+      sleasNumber: req.sleasNumber || '',
+      nicNumber: req.nicNumber || '',
+      censusCode: req.censusCode || '',
+      schoolName: req.schoolName || '',
       requestedAt,
       status: 'pending',
     };
 
-    // Always write to localStorage first — this is the primary cross-tab store
-    const existing = JSON.parse(localStorage.getItem('sams_key_requests') || '[]') as ZonalKeyRequest[];
-    existing.unshift(keyReq);
-    localStorage.setItem('sams_key_requests', JSON.stringify(existing));
-
-    // Also try to persist to Firestore (secondary)
+    // 1. Write to Firestore key_requests collection
     try {
       await setDoc(doc(keyRequestsCol, keyReq.id), keyReq);
-    } catch { /* Firestore unavailable – localStorage is the source of truth */ }
+    } catch (err) {
+      console.error('[SAMS] Error saving key request to Firestore:', err);
+    }
 
-    // Broadcast an official system Notice targeted to zonal_admin
+    // 2. Broadcast an official system Notice targeted to zonal_admin
     const notice: Notice = {
       id: `notice_key_req_${Date.now()}`,
-      title: `🔑 [KEY REQUEST] ${req.principalName} requested Zonal Key for ${req.schoolName}`,
-      body: `Principal: ${req.principalName}\nSchool: ${req.schoolName} (${req.censusCode})\nEmail: ${req.principalEmail}\nPhone: ${req.principalPhone}\nSLEAS ID: ${req.sleasNumber}\nNIC: ${req.nicNumber}\n\nPlease review and approve key dispatch in the Zonal Command Center.`,
+      title: `🔑 [KEY REQUEST] ${keyReq.principalName} requested Zonal Key for ${keyReq.schoolName}`,
+      body: `Principal: ${keyReq.principalName}\nSchool: ${keyReq.schoolName} (${keyReq.censusCode})\nEmail: ${keyReq.principalEmail}\nPhone: ${keyReq.principalPhone}\nSLEAS ID: ${keyReq.sleasNumber}\nNIC: ${keyReq.nicNumber}\n\nPlease review and approve key dispatch in the Zonal Command Center.`,
       date: new Date().toISOString(),
       category: 'Zonal Request',
       targetRole: 'zonal_admin',
-      authorName: req.principalName,
+      authorName: keyReq.principalName,
       authorRole: 'principal',
       priority: 'urgent',
     };
 
-    // Always write notice to localStorage too
-    const existingNotices = JSON.parse(localStorage.getItem('sams_notices') || '[]') as Notice[];
-    existingNotices.unshift(notice);
-    localStorage.setItem('sams_notices', JSON.stringify(existingNotices));
-
     try {
       await setDoc(doc(noticesCol, notice.id), notice);
-    } catch { /* Firestore unavailable */ }
+    } catch (err) {
+      console.error('[SAMS] Error saving key request notice to Firestore:', err);
+    }
+
+    // 3. Local fallback caching
+    try {
+      const existing = JSON.parse(localStorage.getItem('sams_key_requests') || '[]') as ZonalKeyRequest[];
+      existing.unshift(keyReq);
+      localStorage.setItem('sams_key_requests', JSON.stringify(existing));
+
+      const existingNotices = JSON.parse(localStorage.getItem('sams_notices') || '[]') as Notice[];
+      existingNotices.unshift(notice);
+      localStorage.setItem('sams_notices', JSON.stringify(existingNotices));
+    } catch (e) {
+      console.warn('[SAMS] LocalStorage cache write failed:', e);
+    }
 
     return keyReq;
   },
 
   async getZonalKeyRequests(): Promise<ZonalKeyRequest[]> {
-    // Always start with localStorage (most up-to-date for same-origin cross-tab data)
     const local: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
 
     try {
       const snap = await getDocs(keyRequestsCol);
-      if (!snap.empty) {
-        const remote = snap.docs.map(d => d.data());
-        // Merge: prefer remote (Firestore has authoritative status), deduplicate by id
+      const remote = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+      // Merge: prefer remote (Firestore is authoritative), deduplicate by id
+      const merged = [...remote];
+      for (const localReq of local) {
+        if (!merged.find(r => r.id === localReq.id)) {
+          merged.push(localReq);
+        }
+      }
+      return merged.sort((a, b) => b.id.localeCompare(a.id));
+    } catch (err) {
+      console.error('[SAMS] Error fetching key requests from Firestore:', err);
+      return local;
+    }
+  },
+
+  /**
+   * Subscribe to real-time updates for Zonal Key Requests.
+   */
+  subscribeToZonalKeyRequests(
+    callback: (requests: ZonalKeyRequest[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    return onSnapshot(
+      keyRequestsCol,
+      (snap) => {
+        const local: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+        const remote = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
         const merged = [...remote];
         for (const localReq of local) {
           if (!merged.find(r => r.id === localReq.id)) {
-            merged.unshift(localReq);
+            merged.push(localReq);
           }
         }
-        return merged.sort((a, b) => b.id.localeCompare(a.id));
+        callback(merged.sort((a, b) => b.id.localeCompare(a.id)));
+      },
+      (err) => {
+        console.error('[SAMS] subscribeToZonalKeyRequests error:', err);
+        onError?.(err);
       }
-    } catch { /* Firestore unavailable */ }
-
-    return local;
+    );
   },
 
   async updateZonalKeyRequestStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
-    // Always update localStorage
-    const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
-    const updated = existing.map(r => r.id === id ? { ...r, status } : r);
-    localStorage.setItem('sams_key_requests', JSON.stringify(updated));
-
     try {
       await setDoc(doc(keyRequestsCol, id), { status }, { merge: true });
-    } catch { /* Firestore unavailable */ }
+    } catch (err) {
+      console.error('[SAMS] Error updating key request in Firestore:', err);
+    }
+
+    try {
+      const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+      const updated = existing.map(r => r.id === id ? { ...r, status } : r);
+      localStorage.setItem('sams_key_requests', JSON.stringify(updated));
+    } catch { /* ignore */ }
   },
 
   async deleteZonalKeyRequest(id: string): Promise<void> {
-    const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
-    localStorage.setItem('sams_key_requests', JSON.stringify(existing.filter(r => r.id !== id)));
     try {
       await deleteDoc(doc(keyRequestsCol, id));
-    } catch { /* Firestore unavailable */ }
+    } catch (err) {
+      console.error('[SAMS] Error deleting key request in Firestore:', err);
+    }
+
+    try {
+      const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+      localStorage.setItem('sams_key_requests', JSON.stringify(existing.filter(r => r.id !== id)));
+    } catch { /* ignore */ }
   },
 };

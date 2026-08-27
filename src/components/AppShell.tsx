@@ -36,15 +36,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [notifCount, setNotifCount] = useState<number>(0);
 
   useEffect(() => {
-    databaseService.getNotices().then(notices => {
-      const relevantCount = notices.filter(
-        n => (n.targetRole || 'all') === 'all' ||
-             n.targetRole === user?.role ||
-             user?.role === 'principal' ||
-             user?.role === 'zonal_admin'
-      ).length;
-      setNotifCount(relevantCount);
-    }).catch(err => console.error('Failed to load notice count:', err));
+    const unsub = databaseService.subscribeToNotices(
+      (notices) => {
+        const relevantCount = notices.filter(
+          n => (n.targetRole || 'all') === 'all' ||
+               n.targetRole === user?.role ||
+               user?.role === 'principal' ||
+               user?.role === 'zonal_admin'
+        ).length;
+        setNotifCount(relevantCount);
+      },
+      (err) => console.error('Failed to subscribe to notice count:', err)
+    );
+
+    return () => unsub();
   }, [user]);
 
   const langs: { value: AppLanguage; label: string }[] = [
