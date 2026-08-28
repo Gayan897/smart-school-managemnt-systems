@@ -134,14 +134,14 @@ function AppRoutes() {
         path="/substitutes"
         element={
           !user ? <Navigate to="/login" replace /> :
-          <AppShell><ProxyEngineScreen /></AppShell>
+          <Navigate to="/dashboard" replace />
         }
       />
       <Route
         path="/correlation-radar"
         element={
           !user ? <Navigate to="/login" replace /> :
-          <AppShell><CorrelationRadarScreen /></AppShell>
+          <Navigate to="/dashboard" replace />
         }
       />
       <Route

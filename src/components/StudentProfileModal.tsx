@@ -18,7 +18,7 @@ interface StudentProfileModalProps {
 export default function StudentProfileModal({ studentId, onClose }: StudentProfileModalProps) {
   const { language } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'marks' | 'radar' | 'notifications'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'marks' | 'notifications'>('overview');
 
   const [student, setStudent] = useState<Student | null>(null);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -222,7 +222,6 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
             { id: 'overview' as const, label: 'Overview', icon: User },
             { id: 'attendance' as const, label: `Attendance (${attendanceRate}%)`, icon: Calendar },
             { id: 'marks' as const, label: `Academic Marks (${avgMarks}%)`, icon: Award },
-            { id: 'radar' as const, label: 'Predictive Radar', icon: Activity },
             { id: 'notifications' as const, label: `Parent Alerts (${parentNotifications.length})`, icon: Bell },
           ].map(tab => {
             const Icon = tab.icon;
@@ -493,113 +492,7 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
             </div>
           )}
 
-          {/* TAB: PREDICTIVE CORRELATION RADAR */}
-          {activeTab === 'radar' && (() => {
-            const profile = computeStudentCorrelationProfile({
-              student,
-              attendance,
-              marks,
-              timetable,
-            });
-            const alertData = generatePredictiveParentAlert(profile);
 
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* Top Summary Banner */}
-                <div style={{
-                  background: profile.overallRiskLevel === 'critical'
-                    ? 'rgba(239, 68, 68, 0.12)'
-                    : profile.overallRiskLevel === 'at_risk'
-                    ? 'rgba(245, 158, 11, 0.12)'
-                    : 'rgba(16, 185, 129, 0.12)',
-                  border: `1px solid ${profile.overallRiskLevel === 'critical' ? '#ef4444' : profile.overallRiskLevel === 'at_risk' ? '#f59e0b' : '#10b981'}`,
-                  borderRadius: '12px',
-                  padding: '16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '12px',
-                }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '15px' }}>
-                      <Activity size={18} color={profile.overallRiskLevel === 'critical' ? '#ef4444' : '#10b981'} />
-                      Academic Risk Trajectory: {profile.overallRiskLevel.toUpperCase()}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                      Overall Attendance: <strong>{profile.overallAttendanceRate}%</strong> ({profile.totalAbsences} days absent) • Projected Average: <strong>{profile.latestAverageMark}% → {profile.predictedAverageMark}%</strong>
-                    </div>
-                  </div>
-
-                  <a
-                    href={alertData.whatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-primary btn-sm"
-                    style={{ background: '#25D366', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Send size={13} />
-                    WhatsApp Parent Alert
-                  </a>
-                </div>
-
-                {/* Chronic Patterns */}
-                {profile.patterns.length > 0 && (
-                  <div className="card" style={{ margin: 0, borderLeft: '4px solid #ef4444', background: 'rgba(239, 68, 68, 0.06)' }}>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Clock size={15} /> Detected Chronic Absence Patterns
-                    </h4>
-                    {profile.patterns.map((p, idx) => (
-                      <div key={idx} style={{ fontSize: '12px', marginTop: '4px' }}>
-                        • <strong>Period {p.period} ({p.subject})</strong> skipped {p.occurrences} times on {p.dayName}s.
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Subject Projections */}
-                <div className="card" style={{ margin: 0 }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={15} color="#6366f1" />
-                    Subject-Level Grade Drop Forecasts
-                  </h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
-                    {profile.subjectRisks.map(r => (
-                      <div
-                        key={r.subject}
-                        style={{
-                          border: `1px solid ${r.riskLevel === 'critical' ? '#ef4444' : r.riskLevel === 'at_risk' ? '#f59e0b' : 'var(--border)'}`,
-                          borderRadius: '8px',
-                          padding: '12px',
-                          background: 'var(--bg-input)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <strong style={{ fontSize: '13px' }}>{r.subject}</strong>
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            color: r.riskLevel === 'critical' ? '#ef4444' : r.riskLevel === 'at_risk' ? '#f59e0b' : '#10b981'
-                          }}>
-                            {r.gradeDropLabel}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                          Missed {r.missedPeriods} periods ({r.attendanceRate}% att.)
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', borderTop: '1px solid var(--border)', paddingTop: '4px' }}>
-                          💡 <em>{r.recommendation}</em>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
 
           {/* TAB 4: PARENT NOTIFICATIONS */}
           {activeTab === 'notifications' && (

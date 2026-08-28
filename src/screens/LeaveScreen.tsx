@@ -144,52 +144,6 @@ export default function LeaveScreen() {
         </div>
       )}
 
-      {/* Approved Leave Quick Proxy Trigger */}
-      {user?.role === 'principal' && lastApprovedLeave && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.15) 0%, rgba(124, 58, 237, 0.15) 100%)',
-          border: '1px solid #6366f1',
-          borderRadius: '12px',
-          padding: '14px 18px',
-          marginBottom: '20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#818cf8', fontSize: '15px' }}>
-              <Sparkles size={18} />
-              Leave Approved: {lastApprovedLeave.teacherName} ({lastApprovedLeave.startDate} to {lastApprovedLeave.endDate})
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Would you like the AI Smart Engine to find and assign substitute teachers for these dates?
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setLastApprovedLeave(null)}
-            >
-              Dismiss
-            </button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => navigate('/substitutes')}
-              style={{
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                border: 'none',
-              }}
-            >
-              <Sparkles size={14} />
-              {t('generateSubstitutesForLeave', language)}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Requests table */}
       <div className="card">
         {displayedRequests.length === 0 ? (
@@ -372,7 +326,7 @@ export default function LeaveScreen() {
                   placeholder={t('lessonPlanNotesPlaceholder', language)}
                 />
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>
-                  These instructions will be automatically forwarded to the smart substitute teacher assigned to your classes.
+                  Provide optional instructions or study material for your classes while on leave.
                 </span>
               </div>
               <div className="modal-footer">

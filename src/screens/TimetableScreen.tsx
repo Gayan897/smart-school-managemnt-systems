@@ -105,14 +105,6 @@ export default function TimetableScreen() {
           <h1 className="page-title">{t('timetable', language)}</h1>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <Link
-            to="/substitutes"
-            className="btn btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Sparkles size={16} color="#6366f1" />
-            <span>{t('proxyEngine', language)}</span>
-          </Link>
           {user?.role === 'principal' && (
             <button className="btn btn-primary" onClick={() => setShowModal(true)}>
               <Plus size={16} />

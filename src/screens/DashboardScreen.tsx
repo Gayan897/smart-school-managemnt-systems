@@ -177,43 +177,6 @@ export default function DashboardScreen() {
         </div>
       )}
 
-      {/* Teacher Smart Substitute Active Duty Banner */}
-      {myDutiesToday.length > 0 && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.15) 0%, rgba(124, 58, 237, 0.15) 100%)',
-          border: '1px solid #6366f1',
-          borderRadius: '12px',
-          padding: '16px 20px',
-          marginBottom: '20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#818cf8', fontSize: '15px' }}>
-              <UserCheck size={18} />
-              You Have {myDutiesToday.length} Smart Substitute {myDutiesToday.length === 1 ? 'Duty' : 'Duties'} Today!
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {myDutiesToday.map(d => `Period ${d.period} (${d.classRoom} - ${d.originalSubject})`).join(' • ')}
-            </div>
-          </div>
-          <Link
-            to="/substitutes"
-            className="btn btn-primary btn-sm"
-            style={{
-              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-              border: 'none',
-            }}
-          >
-            <Sparkles size={14} />
-            View Duty & Notes
-          </Link>
-        </div>
-      )}
-
       {/* Stats */}
       <div className="stats-grid">
         {stats.map(s => (
@@ -227,40 +190,6 @@ export default function DashboardScreen() {
             </div>
           </div>
         ))}
-
-        {user?.role === 'principal' ? (
-          <>
-            <Link to="/substitutes" className="stat-card" style={{ textDecoration: 'none', cursor: 'pointer' }}>
-              <div className="stat-icon" style={{ background: 'rgba(99, 102, 241, 0.15)' }}>
-                <Sparkles size={22} color="#6366f1" />
-              </div>
-              <div className="stat-info">
-                <div className="stat-value" style={{ color: '#6366f1' }}>{totalProxiesToday}</div>
-                <div className="stat-label">Smart Proxies Today</div>
-              </div>
-            </Link>
-
-            <Link to="/correlation-radar" className="stat-card" style={{ textDecoration: 'none', cursor: 'pointer' }}>
-              <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.15)' }}>
-                <Activity size={22} color="#ef4444" />
-              </div>
-              <div className="stat-info">
-                <div className="stat-value" style={{ color: '#ef4444' }}>AI Radar</div>
-                <div className="stat-label">Academic Risk Map</div>
-              </div>
-            </Link>
-          </>
-        ) : (
-          <Link to="/correlation-radar" className="stat-card" style={{ textDecoration: 'none', cursor: 'pointer' }}>
-            <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.15)' }}>
-              <Activity size={22} color="#ef4444" />
-            </div>
-            <div className="stat-info">
-              <div className="stat-value" style={{ color: '#ef4444' }}>Radar</div>
-              <div className="stat-label">Early Warning System</div>
-            </div>
-          </Link>
-        )}
       </div>
 
       {/* Content grid */}
