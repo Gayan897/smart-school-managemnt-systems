@@ -85,6 +85,15 @@ export default function SignupScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const selectedSchool = schools.find(s => s.censusCode === selectedSchoolCode);
+  const isPrincipalRegistered = Boolean(selectedSchool?.isRegistered && selectedSchool?.principalId) && !isMagicInvite;
+
+  useEffect(() => {
+    if (isPrincipalRegistered && role === 'principal') {
+      setRole('teacher');
+    }
+  }, [isPrincipalRegistered, role]);
+
   // Compress image to base64 JPEG ≤ 200KB using canvas
   async function compressImage(file: File, maxSizeKB = 200): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -339,6 +348,31 @@ export default function SignupScreen() {
           )}
 
           <form onSubmit={handleSubmit}>
+            {/* School Selection (For Teacher and Principal) */}
+            {!isZonalPortal && (
+              <div className="form-group">
+                <label className="form-label">Select Government School (Colombo District)</label>
+                <select
+                  className="form-control"
+                  value={selectedSchoolCode}
+                  onChange={e => {
+                    const newCode = e.target.value;
+                    setSelectedSchoolCode(newCode);
+                    const sch = schools.find(s => s.censusCode === newCode);
+                    if (sch?.isRegistered && sch?.principalId && !isMagicInvite && role === 'principal') {
+                      setRole('teacher');
+                    }
+                  }}
+                >
+                  {schools.map(sch => (
+                    <option key={sch.censusCode} value={sch.censusCode}>
+                      {sch.name} ({sch.zone} Zone - Census: {sch.censusCode}){sch.isRegistered && sch.principalId ? ' 🔒 [Principal Registered]' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* School Staff Role Selection (Teacher & Principal ONLY) */}
             {!isZonalPortal && (
               <div className="form-group">
@@ -355,30 +389,34 @@ export default function SignupScreen() {
                   <button
                     type="button"
                     className={`btn ${role === 'principal' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '13px', padding: '9px 6px' }}
-                    onClick={() => setRole('principal')}
+                    style={{
+                      fontSize: '13px',
+                      padding: '9px 6px',
+                      opacity: isPrincipalRegistered ? 0.55 : 1,
+                      cursor: isPrincipalRegistered ? 'not-allowed' : 'pointer',
+                    }}
+                    disabled={isPrincipalRegistered}
+                    onClick={() => !isPrincipalRegistered && setRole('principal')}
+                    title={isPrincipalRegistered ? `A Principal is already registered for ${selectedSchool?.name}` : undefined}
                   >
-                    Principal
+                    Principal {isPrincipalRegistered ? '🔒' : ''}
                   </button>
                 </div>
-              </div>
-            )}
-
-            {/* School Selection (For Teacher and Principal) */}
-            {!isZonalPortal && (
-              <div className="form-group">
-                <label className="form-label">Select Government School (Colombo District)</label>
-                <select
-                  className="form-control"
-                  value={selectedSchoolCode}
-                  onChange={e => setSelectedSchoolCode(e.target.value)}
-                >
-                  {schools.map(sch => (
-                    <option key={sch.censusCode} value={sch.censusCode}>
-                      {sch.name} ({sch.zone} Zone - Census: {sch.censusCode})
-                    </option>
-                  ))}
-                </select>
+                {isPrincipalRegistered && (
+                  <div style={{
+                    fontSize: '11px',
+                    color: '#e11d48',
+                    background: 'rgba(225, 29, 72, 0.08)',
+                    border: '1px solid rgba(225, 29, 72, 0.25)',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    marginTop: '8px',
+                    fontWeight: 600,
+                    lineHeight: 1.4
+                  }}>
+                    🔒 <strong>Principal Registered:</strong> {selectedSchool?.principalName || 'Verified Principal'} has already registered for {selectedSchool?.name}. Only Teacher accounts can register for this school.
+                  </div>
+                )}
               </div>
             )}
 
