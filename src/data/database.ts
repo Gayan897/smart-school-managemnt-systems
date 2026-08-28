@@ -54,6 +54,30 @@ const proxyAssignmentsCol = getColRef<ProxyAssignment>('proxy_assignments');
 const schoolsCol = getColRef<GovernmentSchool>('schools');
 const keyRequestsCol = getColRef<ZonalKeyRequest>('key_requests');
 
+/**
+ * Recursively removes keys with `undefined` values from an object,
+ * preventing Firestore `setDoc`/`batch.set` unsupported field value errors.
+ */
+export function cleanData<T>(obj: T): T {
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanData(item)) as unknown as T;
+  }
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+        cleaned[key] = cleanData(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned as T;
+}
+
 export const PERMANENT_ZONAL_ADMIN: User = {
   id: 'zonal_admin_permanent_master',
   username: 'admin',
@@ -68,14 +92,14 @@ export const PERMANENT_ZONAL_ADMIN: User = {
 
 export const databaseService = {
   async createUser(user: User): Promise<void> {
-    await setDoc(doc(usersCol, user.id), user);
+    await setDoc(doc(usersCol, user.id), cleanData(user));
   },
 
   async getUserByUsername(username: string): Promise<User | null> {
     const clean = username.trim();
     if (clean.toLowerCase() === 'admin' || clean.toLowerCase() === 'zonal_admin') {
       try {
-        await setDoc(doc(usersCol, PERMANENT_ZONAL_ADMIN.id), PERMANENT_ZONAL_ADMIN, { merge: true });
+        await setDoc(doc(usersCol, PERMANENT_ZONAL_ADMIN.id), cleanData(PERMANENT_ZONAL_ADMIN), { merge: true });
       } catch (e) {
         console.warn('Failed to seed permanent admin:', e);
       }
@@ -99,7 +123,7 @@ export const databaseService = {
       medicalBalance: 14,
       annualBalance: 21,
     };
-    await setDoc(doc(teachersCol, user.id), teacher);
+    await setDoc(doc(teachersCol, user.id), cleanData(teacher));
   },
 
   async getTeachers(): Promise<Teacher[]> {
@@ -132,7 +156,7 @@ export const databaseService = {
   },
 
   async createStudent(student: Student): Promise<void> {
-    await setDoc(doc(studentsCol, student.id), student);
+    await setDoc(doc(studentsCol, student.id), cleanData(student));
   },
 
   generateStudentId(classRoom: string, existingStudents: Student[] = []): string {
@@ -183,7 +207,7 @@ export const databaseService = {
   },
 
   async insertLeaveRequest(request: LeaveRequest): Promise<void> {
-    await setDoc(doc(leaveRequestsCol, request.id), request);
+    await setDoc(doc(leaveRequestsCol, request.id), cleanData(request));
     // Automatically generate notification for Principal
     const notice: Notice = {
       id: `notice_leave_${request.id}`,
@@ -196,11 +220,11 @@ export const databaseService = {
       authorRole: 'teacher',
       priority: 'urgent',
     };
-    await setDoc(doc(noticesCol, notice.id), notice);
+    await setDoc(doc(noticesCol, notice.id), cleanData(notice));
   },
 
   async updateLeaveRequest(request: LeaveRequest): Promise<void> {
-    await setDoc(doc(leaveRequestsCol, request.id), request, { merge: true });
+    await setDoc(doc(leaveRequestsCol, request.id), cleanData(request), { merge: true });
     // Automatically generate notification for Teacher
     const notice: Notice = {
       id: `notice_leave_decision_${request.id}_${Date.now()}`,
@@ -213,7 +237,7 @@ export const databaseService = {
       authorRole: 'principal',
       priority: request.status === 'approved' ? 'high' : 'urgent',
     };
-    await setDoc(doc(noticesCol, notice.id), notice);
+    await setDoc(doc(noticesCol, notice.id), cleanData(notice));
   },
 
   async getAttendance(): Promise<AttendanceRecord[]> {
@@ -227,11 +251,11 @@ export const databaseService = {
   async saveAttendance(record: AttendanceRecord): Promise<void> {
     if (record.id) {
       const docRef = doc(attendanceCol, record.id);
-      await setDoc(docRef, record, { merge: true });
+      await setDoc(docRef, cleanData(record), { merge: true });
     } else {
       const newDocRef = doc(collection(db, 'attendance'));
       const data = { ...record, id: newDocRef.id };
-      await setDoc(newDocRef, data);
+      await setDoc(newDocRef, cleanData(data));
     }
   },
 
@@ -248,10 +272,10 @@ export const databaseService = {
       let attDocRef;
       if (record.id) {
         attDocRef = doc(attendanceCol, record.id);
-        batch.set(attDocRef, record, { merge: true });
+        batch.set(attDocRef, cleanData(record), { merge: true });
       } else {
         attDocRef = doc(collection(db, 'attendance'));
-        batch.set(attDocRef, { ...record, id: attDocRef.id });
+        batch.set(attDocRef, cleanData({ ...record, id: attDocRef.id }));
       }
 
       // 2. Generate real-time Parent Notification document
@@ -366,7 +390,7 @@ export const databaseService = {
   },
 
   async createNotice(notice: Notice): Promise<void> {
-    await setDoc(doc(noticesCol, notice.id), notice);
+    await setDoc(doc(noticesCol, notice.id), cleanData(notice));
   },
 
   async deleteNotice(noticeId: string): Promise<void> {
@@ -393,16 +417,16 @@ export const databaseService = {
     teacherName: string | null
   ): Promise<void> {
     const classDocRef = doc(classesCol, classId);
-    await setDoc(classDocRef, {
+    await setDoc(classDocRef, cleanData({
       homeroomTeacherId: teacherId,
       homeroomTeacherName: teacherName
-    }, { merge: true });
+    }), { merge: true });
 
     if (teacherId) {
       const teacherDocRef = doc(teachersCol, teacherId);
-      await setDoc(teacherDocRef, {
+      await setDoc(teacherDocRef, cleanData({
         classRoom: classId
-      }, { merge: true });
+      }), { merge: true });
 
       const notice: Notice = {
         id: `notice_class_assign_${classId}_${Date.now()}`,
@@ -415,16 +439,16 @@ export const databaseService = {
         authorRole: 'principal',
         priority: 'normal',
       };
-      await setDoc(doc(noticesCol, notice.id), notice);
+      await setDoc(doc(noticesCol, notice.id), cleanData(notice));
     }
   },
 
   async removeTeacherFromClass(classId: string): Promise<void> {
     const classDocRef = doc(classesCol, classId);
-    await setDoc(classDocRef, {
+    await setDoc(classDocRef, cleanData({
       homeroomTeacherId: null,
       homeroomTeacherName: null
-    }, { merge: true });
+    }), { merge: true });
 
     const notice: Notice = {
       id: `notice_class_remove_${classId}_${Date.now()}`,
@@ -437,7 +461,7 @@ export const databaseService = {
       authorRole: 'principal',
       priority: 'normal',
     };
-    await setDoc(doc(noticesCol, notice.id), notice);
+    await setDoc(doc(noticesCol, notice.id), cleanData(notice));
   },
 
   // ─── Real-time Subscriptions (onSnapshot) ──────────────────────────────────
@@ -534,7 +558,7 @@ export const databaseService = {
   },
 
   async createProxyAssignment(assignment: ProxyAssignment): Promise<void> {
-    await setDoc(doc(proxyAssignmentsCol, assignment.id), assignment);
+    await setDoc(doc(proxyAssignmentsCol, assignment.id), cleanData(assignment));
 
     // Push notice to substitute teacher
     const notice: Notice = {
@@ -548,7 +572,7 @@ export const databaseService = {
       authorRole: 'principal',
       priority: 'urgent',
     };
-    await setDoc(doc(noticesCol, notice.id), notice);
+    await setDoc(doc(noticesCol, notice.id), cleanData(notice));
   },
 
   async batchCreateProxyAssignments(assignments: ProxyAssignment[]): Promise<void> {
@@ -557,7 +581,7 @@ export const databaseService = {
 
     for (const assignment of assignments) {
       const docRef = doc(proxyAssignmentsCol, assignment.id);
-      batch.set(docRef, assignment);
+      batch.set(docRef, cleanData(assignment));
 
       // Create Notice
       const noticeId = `notice_proxy_${assignment.id}_${Date.now()}`;
@@ -573,7 +597,7 @@ export const databaseService = {
         authorRole: 'principal',
         priority: 'urgent',
       };
-      batch.set(noticeDocRef, notice);
+      batch.set(noticeDocRef, cleanData(notice));
     }
 
     await batch.commit();
@@ -581,7 +605,7 @@ export const databaseService = {
 
   async updateProxyAssignmentStatus(id: string, status: ProxyAssignment['status']): Promise<void> {
     const docRef = doc(proxyAssignmentsCol, id);
-    await setDoc(docRef, { status }, { merge: true });
+    await setDoc(docRef, cleanData({ status }), { merge: true });
   },
 
   async deleteProxyAssignment(id: string): Promise<void> {
@@ -704,7 +728,7 @@ export const databaseService = {
     const principalDoc = snapshot.docs[0];
     const principalUser = principalDoc.data();
 
-    await setDoc(doc(usersCol, principalUser.id), { password: newPassword }, { merge: true });
+    await setDoc(doc(usersCol, principalUser.id), cleanData({ password: newPassword }), { merge: true });
 
     return {
       success: true,
@@ -716,7 +740,7 @@ export const databaseService = {
 
   async updateSchoolZonalKey(censusCode: string, newKey: string): Promise<void> {
     const schoolDocRef = doc(schoolsCol, censusCode);
-    await setDoc(schoolDocRef, { zonalSecretKey: newKey.trim().toUpperCase() }, { merge: true });
+    await setDoc(schoolDocRef, cleanData({ zonalSecretKey: newKey.trim().toUpperCase() }), { merge: true });
   },
 
   async dispatchZonalKey(censusCode: string, principalEmail: string, principalPhone?: string): Promise<{ success: boolean; inviteUrl: string; dispatchedAt: string }> {
@@ -730,12 +754,12 @@ export const databaseService = {
     });
 
     const schoolDocRef = doc(schoolsCol, censusCode);
-    await setDoc(schoolDocRef, {
+    await setDoc(schoolDocRef, cleanData({
       principalEmail: principalEmail.trim(),
       principalPhone: principalPhone ? principalPhone.trim() : undefined,
       dispatchStatus: 'dispatched',
       dispatchedAt,
-    }, { merge: true });
+    }), { merge: true });
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
     const inviteUrl = `${origin}/signup?censusCode=${encodeURIComponent(censusCode)}&key=${encodeURIComponent(school.zonalSecretKey)}&email=${encodeURIComponent(principalEmail.trim())}&invite=true`;
@@ -749,11 +773,11 @@ export const databaseService = {
 
   async registerSchoolPrincipal(censusCode: string, principalUser: User): Promise<void> {
     const schoolDocRef = doc(schoolsCol, censusCode);
-    await setDoc(schoolDocRef, {
+    await setDoc(schoolDocRef, cleanData({
       principalId: principalUser.id,
       principalName: principalUser.name,
       isRegistered: true,
-    }, { merge: true });
+    }), { merge: true });
   },
 
   async requestZonalMasterKey(req: Omit<ZonalKeyRequest, 'id' | 'requestedAt' | 'status'>): Promise<ZonalKeyRequest> {
@@ -779,7 +803,7 @@ export const databaseService = {
     // 1. Write to Firestore key_requests collection
     let firestoreError: Error | null = null;
     try {
-      await setDoc(doc(keyRequestsCol, keyReq.id), keyReq);
+      await setDoc(doc(keyRequestsCol, keyReq.id), cleanData(keyReq));
     } catch (err) {
       console.error('[EduNexus] Error saving key request to Firestore:', err);
       firestoreError = err instanceof Error ? err : new Error(String(err));
@@ -799,7 +823,7 @@ export const databaseService = {
     };
 
     try {
-      await setDoc(doc(noticesCol, notice.id), notice);
+      await setDoc(doc(noticesCol, notice.id), cleanData(notice));
     } catch (err) {
       console.error('[EduNexus] Error saving key request notice to Firestore:', err);
     }
@@ -879,7 +903,7 @@ export const databaseService = {
 
   async updateZonalKeyRequestStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
     try {
-      await setDoc(doc(keyRequestsCol, id), { status }, { merge: true });
+      await setDoc(doc(keyRequestsCol, id), cleanData({ status }), { merge: true });
     } catch (err) {
       console.error('[EduNexus] Error updating key request in Firestore:', err);
     }

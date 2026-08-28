@@ -246,12 +246,12 @@ export default function SignupScreen() {
         username: username.trim(),
         password,
         name: name.trim(),
-        email: email.trim() || inviteEmail || undefined,
         role,
         schoolCensusCode: role === 'zonal_admin' ? 'ZONAL-MOE' : selectedSchoolCode,
         schoolName: role === 'zonal_admin' ? 'Colombo / Homagama Zonal Education Office' : (selectedSchool?.name || 'Mahinda Rajapaksha College'),
-        nicNumber: nicNumber.trim() || undefined,
-        sleasNumber: sleasNumber.trim() || undefined,
+        ...(email.trim() || inviteEmail ? { email: email.trim() || inviteEmail } : {}),
+        ...(nicNumber.trim() ? { nicNumber: nicNumber.trim() } : {}),
+        ...(sleasNumber.trim() ? { sleasNumber: sleasNumber.trim() } : {}),
       };
 
       await databaseService.createUser(newUser);

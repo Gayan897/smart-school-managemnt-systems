@@ -130,12 +130,15 @@ export default function AttendanceScreen() {
         const existingRec = existing.find(
           a => a.studentId === s.id && a.date.startsWith(selectedDate)
         );
-        return {
-          id: existingRec?.id ?? undefined,
+        const rec: AttendanceRecord = {
           studentId: s.id,
           date: selectedDate,
           status: attendance[s.id] ?? 'present',
         };
+        if (existingRec?.id) {
+          rec.id = existingRec.id;
+        }
+        return rec;
       });
 
       const studentMap: Record<string, Student> = {};
