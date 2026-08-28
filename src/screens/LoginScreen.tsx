@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, Key, ShieldCheck, X, CheckCircle, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
-import type { AppLanguage } from '../data/models';
+import { databaseService } from '../data/database';
+import type { AppLanguage, GovernmentSchool } from '../data/models';
 import '../components/AppShell.css';
 import landingBg from '../assets/landing_bg.png';
 
@@ -16,11 +17,31 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Forgot Password / Principal Account Recovery Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [schools, setSchools] = useState<GovernmentSchool[]>([]);
+  const [recoverySchoolCode, setRecoverySchoolCode] = useState('');
+  const [recoveryKey, setRecoveryKey] = useState('');
+  const [recoveryNewPw, setRecoveryNewPw] = useState('');
+  const [showRecoveryPw, setShowRecoveryPw] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoverySuccessMsg, setRecoverySuccessMsg] = useState('');
+
   const langs: { value: AppLanguage; label: string }[] = [
     { value: 'english', label: 'English' },
     { value: 'sinhala', label: 'සිංහල' },
     { value: 'tamil',   label: 'தமிழ்' },
   ];
+
+  useEffect(() => {
+    databaseService.getZonalSchools().then(data => {
+      setSchools(data);
+      if (data.length > 0) {
+        setRecoverySchoolCode(data[0].censusCode);
+      }
+    }).catch(err => console.error('Failed to load schools:', err));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,6 +62,35 @@ export default function LoginScreen() {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePasswordRecovery(e: React.FormEvent) {
+    e.preventDefault();
+    if (!recoveryKey.trim() || !recoveryNewPw) {
+      setRecoveryError('Please enter your Zonal Master Security Key and New Password.');
+      return;
+    }
+    if (recoveryNewPw.length < 6) {
+      setRecoveryError('New Password must be at least 6 characters long.');
+      return;
+    }
+    setRecoveryLoading(true);
+    setRecoveryError('');
+    setRecoverySuccessMsg('');
+    try {
+      const res = await databaseService.resetPrincipalPassword(
+        recoverySchoolCode,
+        recoveryKey.trim(),
+        recoveryNewPw
+      );
+      setRecoverySuccessMsg(`✅ Password reset successfully for Principal ${res.name} (${res.schoolName})!`);
+      setUsername(res.username);
+      setPassword(recoveryNewPw);
+    } catch (err: unknown) {
+      setRecoveryError(err instanceof Error ? err.message : 'Failed to reset password.');
+    } finally {
+      setRecoveryLoading(false);
     }
   }
 
@@ -88,8 +138,30 @@ export default function LoginScreen() {
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">{t('password', language)}</label>
+            <div className="form-group" style={{ marginBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label">{t('password', language)}</label>
+                <button
+                  type="button"
+                  className="auth-link"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary-color)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                  onClick={() => {
+                    setShowForgotModal(true);
+                    setRecoveryError('');
+                    setRecoverySuccessMsg('');
+                  }}
+                >
+                  🔑 {t('forgotPassword', language)}
+                </button>
+              </div>
               <div className="input-wrapper">
                 <input
                   id="login-password"
@@ -145,6 +217,126 @@ export default function LoginScreen() {
           </div>
         </div>
       </div>
+
+      {/* ── Principal Forgot Password / Recovery Modal ── */}
+      {showForgotModal && (
+        <div className="modal-overlay" style={{ background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)', zIndex: 1000 }}>
+          <div className="modal-content card" style={{ maxWidth: '440px', width: '92%', border: '2px solid #0284c7', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', animation: 'modalSlideIn 0.25s ease-out' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(2, 132, 199, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+                  <Key size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-color)' }}>{t('principalRecovery', language)}</h3>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Verify Zonal Security Key to Reset Password</p>
+                </div>
+              </div>
+              <button className="btn btn-ghost btn-icon" onClick={() => setShowForgotModal(false)} style={{ padding: '4px' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {recoveryError && (
+              <div style={{ background: 'rgba(225, 29, 72, 0.1)', border: '1px solid rgba(225, 29, 72, 0.3)', color: '#e11d48', padding: '10px 12px', borderRadius: '8px', fontSize: '12px', marginBottom: '14px', lineHeight: 1.4 }}>
+                {recoveryError}
+              </div>
+            )}
+
+            {recoverySuccessMsg && (
+              <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', padding: '12px 14px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px', lineHeight: 1.5 }}>
+                <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle size={16} /> Password Recovery Complete
+                </div>
+                <div>{recoverySuccessMsg}</div>
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#059669' }}>
+                  Username auto-filled on login screen. Click <strong>Login</strong> to proceed.
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordRecovery}>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '12px' }}>Select Government School</label>
+                <select
+                  className="form-control"
+                  value={recoverySchoolCode}
+                  onChange={e => setRecoverySchoolCode(e.target.value)}
+                  required
+                >
+                  {schools.map(sch => (
+                    <option key={sch.censusCode} value={sch.censusCode}>
+                      {sch.name} ({sch.zone} Zone - Census: {sch.censusCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '12px' }}>Zonal Master Security Key *</label>
+                <div className="input-wrapper">
+                  <input
+                    className="form-control"
+                    placeholder="e.g. HMG-MRC-8942"
+                    value={recoveryKey}
+                    onChange={e => setRecoveryKey(e.target.value)}
+                    style={{ textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}
+                    required
+                  />
+                  <ShieldCheck size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#0284c7' }} />
+                </div>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Issued by Homagama / Colombo Zonal Education Office
+                </span>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '18px' }}>
+                <label className="form-label" style={{ fontSize: '12px' }}>New Password *</label>
+                <div className="input-wrapper">
+                  <input
+                    className="form-control"
+                    type={showRecoveryPw ? 'text' : 'password'}
+                    placeholder="Enter new password (min. 6 chars)"
+                    value={recoveryNewPw}
+                    onChange={e => setRecoveryNewPw(e.target.value)}
+                    style={{ paddingRight: '38px' }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowRecoveryPw(s => !s)}
+                    style={{
+                      position: 'absolute', right: '10px', top: '50%',
+                      transform: 'translateY(-50%)', background: 'none',
+                      border: 'none', cursor: 'pointer', color: 'var(--text-muted)'
+                    }}
+                  >
+                    {showRecoveryPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  disabled={recoveryLoading}
+                >
+                  {recoveryLoading ? <span className="spinner spinner-sm" /> : <><Lock size={14} /> Reset Password</>}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowForgotModal(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

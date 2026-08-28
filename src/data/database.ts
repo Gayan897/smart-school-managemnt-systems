@@ -666,6 +666,54 @@ export const databaseService = {
     return { valid: true, school };
   },
 
+  async resetPrincipalPassword(
+    censusCode: string,
+    zonalSecretKey: string,
+    newPassword: string
+  ): Promise<{ success: boolean; username: string; name: string; schoolName: string }> {
+    if (!censusCode || !zonalSecretKey.trim() || !newPassword) {
+      throw new Error('School Census Code, Zonal Master Security Key, and New Password are required.');
+    }
+    if (newPassword.length < 6) {
+      throw new Error('New Password must be at least 6 characters long.');
+    }
+
+    const schools = await this.getZonalSchools();
+    const school = schools.find(s => s.censusCode === censusCode);
+
+    if (!school) {
+      throw new Error('School Census Code not found in district registry.');
+    }
+
+    if (school.zonalSecretKey.trim().toUpperCase() !== zonalSecretKey.trim().toUpperCase()) {
+      throw new Error('Invalid Zonal Master Security Key for this school. Verification failed.');
+    }
+
+    const q = query(
+      usersCol,
+      where('schoolCensusCode', '==', censusCode),
+      where('role', '==', 'principal'),
+      limit(1)
+    );
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      throw new Error(`No registered Principal account was found for ${school.name}. Please contact Zonal Education Office.`);
+    }
+
+    const principalDoc = snapshot.docs[0];
+    const principalUser = principalDoc.data();
+
+    await setDoc(doc(usersCol, principalUser.id), { password: newPassword }, { merge: true });
+
+    return {
+      success: true,
+      username: principalUser.username,
+      name: principalUser.name,
+      schoolName: school.name,
+    };
+  },
+
   async updateSchoolZonalKey(censusCode: string, newKey: string): Promise<void> {
     const schoolDocRef = doc(schoolsCol, censusCode);
     await setDoc(schoolDocRef, { zonalSecretKey: newKey.trim().toUpperCase() }, { merge: true });

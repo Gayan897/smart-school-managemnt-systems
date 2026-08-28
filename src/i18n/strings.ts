@@ -24,6 +24,8 @@ const strings: Translations = {
   role: { english: 'Role', sinhala: 'භූමිකාව', tamil: 'பங்கு' },
   principal: { english: 'Principal', sinhala: 'විදුහල්පති', tamil: 'அதிபர்' },
   teacher: { english: 'Teacher', sinhala: 'ගුරු', tamil: 'ஆசிரியர்' },
+  forgotPassword: { english: 'Forgot Password?', sinhala: 'මුරපදය අමතකද?', tamil: 'கடவுச்சொல்லை மறந்துவிட்டீர்களா?' },
+  principalRecovery: { english: 'Principal Password Recovery', sinhala: 'විදුහල්පති මුරපදය නැවත ලබා ගැනීම', tamil: 'அதிபர் கடவுச்சொல் மீட்பு' },
   haveAccount: { english: 'Already have an account?', sinhala: 'දැනටමත් ගිණුමක් තිබේද?', tamil: 'ஏற்கனவே கணக்கு உள்ளதா?' },
 
   // Navigation
