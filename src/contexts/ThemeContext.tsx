@@ -11,7 +11,7 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('sams_theme') as Theme;
+    const saved = (localStorage.getItem('edunexus_theme') || localStorage.getItem('sams_theme')) as Theme;
     if (saved === 'light' || saved === 'dark') return saved;
     // Check user system preferences
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -28,7 +28,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.classList.remove('light');
       root.setAttribute('data-theme', 'dark');
     }
-    localStorage.setItem('sams_theme', theme);
+    localStorage.setItem('edunexus_theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {

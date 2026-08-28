@@ -302,11 +302,11 @@ export const databaseService = {
 
     let alertText = '';
     if (status === 'absent') {
-      alertText = `🚨 *SAMS URGENT ALERT* 🚨\n\nDear Parent/Guardian,\n\nYour child *${studentName}* (ID: ${student.id}, Class: ${student.classRoom}) was marked *ABSENT* from school today (${date}).\n\nRecorded by: ${teacherName || 'Homeroom Teacher'}\n\nIf this absence is unexcused, please contact the school immediately or reply with the reason for absence.\n\n— SAMS School Administration`;
+      alertText = `🚨 *EDUNEXUS URGENT ALERT* 🚨\n\nDear Parent/Guardian,\n\nYour child *${studentName}* (ID: ${student.id}, Class: ${student.classRoom}) was marked *ABSENT* from school today (${date}).\n\nRecorded by: ${teacherName || 'Homeroom Teacher'}\n\nIf this absence is unexcused, please contact the school immediately or reply with the reason for absence.\n\n— EduNexus School Administration`;
     } else if (status === 'late') {
-      alertText = `⚠️ *SAMS ATTENDANCE NOTICE* ⚠️\n\nDear Parent/Guardian,\n\nYour child *${studentName}* (Class: ${student.classRoom}) arrived *LATE* to school on ${date}.\n\nRecorded by: ${teacherName || 'Homeroom Teacher'}\n\n— SAMS School Administration`;
+      alertText = `⚠️ *EDUNEXUS ATTENDANCE NOTICE* ⚠️\n\nDear Parent/Guardian,\n\nYour child *${studentName}* (Class: ${student.classRoom}) arrived *LATE* to school on ${date}.\n\nRecorded by: ${teacherName || 'Homeroom Teacher'}\n\n— EduNexus School Administration`;
     } else {
-      alertText = `ℹ️ *SAMS Attendance Notice*: ${studentName} was marked ${status.toUpperCase()} on ${date}.`;
+      alertText = `ℹ️ *EduNexus Attendance Notice*: ${studentName} was marked ${status.toUpperCase()} on ${date}.`;
     }
 
     const encodedText = encodeURIComponent(alertText);
@@ -466,7 +466,7 @@ export const databaseService = {
         callback(notices);
       },
       (err) => {
-        console.error('[SAMS] subscribeToNotices error:', err);
+        console.error('[EduNexus] subscribeToNotices error:', err);
         onError?.(err);
       }
     );
@@ -488,7 +488,7 @@ export const databaseService = {
         callback(records);
       },
       (err) => {
-        console.error('[SAMS] subscribeToAttendance error:', err);
+        console.error('[EduNexus] subscribeToAttendance error:', err);
         onError?.(err);
       }
     );
@@ -516,7 +516,7 @@ export const databaseService = {
         callback(list);
       },
       (err) => {
-        console.error('[SAMS] subscribeToParentNotifications error:', err);
+        console.error('[EduNexus] subscribeToParentNotifications error:', err);
         onError?.(err);
       }
     );
@@ -604,7 +604,7 @@ export const databaseService = {
         callback(list.sort((a, b) => a.period - b.period));
       },
       (err) => {
-        console.error('[SAMS] subscribeToProxyAssignments error:', err);
+        console.error('[EduNexus] subscribeToProxyAssignments error:', err);
         onError?.(err);
       }
     );
@@ -612,7 +612,7 @@ export const databaseService = {
 
   generateProxyShareMessage(assignment: ProxyAssignment, teacherPhone?: string) {
     const cleanPhone = (teacherPhone || '').replace(/[^0-9+]/g, '');
-    const text = `🚨 *SAMS SMART SUBSTITUTE ALERT* 🚨\n\nDear *${assignment.substituteTeacherName}*,\n\nYou have been assigned as *Proxy Teacher* today (${assignment.date}).\n\n📌 *Details*:\n• *Class*: ${assignment.classRoom}\n• *Period*: Period ${assignment.period}\n• *Subject*: ${assignment.originalSubject}\n• *Covering For*: ${assignment.originalTeacherName}\n• *Match Score*: ${assignment.matchScore}% (${assignment.matchReason})\n${assignment.lessonPlanNotes ? `\n📝 *Lesson Instructions*:\n"${assignment.lessonPlanNotes}"\n` : ''}\nPlease arrive at classroom ${assignment.classRoom} on time.\n\n— SAMS Automated Substitute Dispatcher`;
+    const text = `🚨 *EDUNEXUS SMART SUBSTITUTE ALERT* 🚨\n\nDear *${assignment.substituteTeacherName}*,\n\nYou have been assigned as *Proxy Teacher* today (${assignment.date}).\n\n📌 *Details*:\n• *Class*: ${assignment.classRoom}\n• *Period*: Period ${assignment.period}\n• *Subject*: ${assignment.originalSubject}\n• *Covering For*: ${assignment.originalTeacherName}\n• *Match Score*: ${assignment.matchScore}% (${assignment.matchReason})\n${assignment.lessonPlanNotes ? `\n📝 *Lesson Instructions*:\n"${assignment.lessonPlanNotes}"\n` : ''}\nPlease arrive at classroom ${assignment.classRoom} on time.\n\n— EduNexus Automated Substitute Dispatcher`;
 
     const encoded = encodeURIComponent(text);
     const whatsappUrl = cleanPhone ? `https://wa.me/${cleanPhone.replace('+', '')}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
@@ -725,7 +725,7 @@ export const databaseService = {
       requestedAt,
       status: 'pending',
       ...(req.nicFrontImage ? { nicFrontImage: req.nicFrontImage } : {}),
-      ...(req.nicBackImage  ? { nicBackImage:  req.nicBackImage  } : {}),
+      ...(req.nicBackImage ? { nicBackImage: req.nicBackImage } : {}),
     };
 
     // 1. Write to Firestore key_requests collection
@@ -733,7 +733,7 @@ export const databaseService = {
     try {
       await setDoc(doc(keyRequestsCol, keyReq.id), keyReq);
     } catch (err) {
-      console.error('[SAMS] Error saving key request to Firestore:', err);
+      console.error('[EduNexus] Error saving key request to Firestore:', err);
       firestoreError = err instanceof Error ? err : new Error(String(err));
     }
 
@@ -753,20 +753,20 @@ export const databaseService = {
     try {
       await setDoc(doc(noticesCol, notice.id), notice);
     } catch (err) {
-      console.error('[SAMS] Error saving key request notice to Firestore:', err);
+      console.error('[EduNexus] Error saving key request notice to Firestore:', err);
     }
 
     // 3. Local fallback caching
     try {
-      const existing = JSON.parse(localStorage.getItem('sams_key_requests') || '[]') as ZonalKeyRequest[];
+      const existing = JSON.parse(localStorage.getItem('edunexus_key_requests') || localStorage.getItem('sams_key_requests') || '[]') as ZonalKeyRequest[];
       existing.unshift(keyReq);
-      localStorage.setItem('sams_key_requests', JSON.stringify(existing));
+      localStorage.setItem('edunexus_key_requests', JSON.stringify(existing));
 
-      const existingNotices = JSON.parse(localStorage.getItem('sams_notices') || '[]') as Notice[];
+      const existingNotices = JSON.parse(localStorage.getItem('edunexus_notices') || localStorage.getItem('sams_notices') || '[]') as Notice[];
       existingNotices.unshift(notice);
-      localStorage.setItem('sams_notices', JSON.stringify(existingNotices));
+      localStorage.setItem('edunexus_notices', JSON.stringify(existingNotices));
     } catch (e) {
-      console.warn('[SAMS] LocalStorage cache write failed:', e);
+      console.warn('[EduNexus] LocalStorage cache write failed:', e);
     }
 
     if (firestoreError) {
@@ -783,7 +783,7 @@ export const databaseService = {
   },
 
   async getZonalKeyRequests(): Promise<ZonalKeyRequest[]> {
-    const local: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+    const local: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('edunexus_key_requests') || localStorage.getItem('sams_key_requests') || '[]');
 
     try {
       const snap = await getDocs(keyRequestsCol);
@@ -797,7 +797,7 @@ export const databaseService = {
       }
       return merged.sort((a, b) => b.id.localeCompare(a.id));
     } catch (err) {
-      console.error('[SAMS] Error fetching key requests from Firestore:', err);
+      console.error('[EduNexus] Error fetching key requests from Firestore:', err);
       return local;
     }
   },
@@ -812,7 +812,7 @@ export const databaseService = {
     return onSnapshot(
       keyRequestsCol,
       (snap) => {
-        const local: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+        const local: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('edunexus_key_requests') || localStorage.getItem('sams_key_requests') || '[]');
         const remote = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
         const merged = [...remote];
         for (const localReq of local) {
@@ -823,7 +823,7 @@ export const databaseService = {
         callback(merged.sort((a, b) => b.id.localeCompare(a.id)));
       },
       (err) => {
-        console.error('[SAMS] subscribeToZonalKeyRequests error:', err);
+        console.error('[EduNexus] subscribeToZonalKeyRequests error:', err);
         onError?.(err);
       }
     );
@@ -833,13 +833,13 @@ export const databaseService = {
     try {
       await setDoc(doc(keyRequestsCol, id), { status }, { merge: true });
     } catch (err) {
-      console.error('[SAMS] Error updating key request in Firestore:', err);
+      console.error('[EduNexus] Error updating key request in Firestore:', err);
     }
 
     try {
-      const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
+      const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('edunexus_key_requests') || localStorage.getItem('sams_key_requests') || '[]');
       const updated = existing.map(r => r.id === id ? { ...r, status } : r);
-      localStorage.setItem('sams_key_requests', JSON.stringify(updated));
+      localStorage.setItem('edunexus_key_requests', JSON.stringify(updated));
     } catch { /* ignore */ }
   },
 
@@ -847,12 +847,12 @@ export const databaseService = {
     try {
       await deleteDoc(doc(keyRequestsCol, id));
     } catch (err) {
-      console.error('[SAMS] Error deleting key request in Firestore:', err);
+      console.error('[EduNexus] Error deleting key request in Firestore:', err);
     }
 
     try {
-      const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('sams_key_requests') || '[]');
-      localStorage.setItem('sams_key_requests', JSON.stringify(existing.filter(r => r.id !== id)));
+      const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('edunexus_key_requests') || localStorage.getItem('sams_key_requests') || '[]');
+      localStorage.setItem('edunexus_key_requests', JSON.stringify(existing.filter(r => r.id !== id)));
     } catch { /* ignore */ }
   },
 };

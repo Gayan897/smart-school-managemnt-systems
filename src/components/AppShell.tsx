@@ -88,7 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <GraduationCap size={22} />
-            <span>SAMS</span>
+            <span>EduNexus</span>
           </div>
           <button
             className="btn btn-ghost btn-icon sidebar-close"
@@ -154,7 +154,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="header-title">
             <GraduationCap size={18} />
-            <span>{user?.schoolName ? `SAMS | ${user.schoolName}` : t('appName', language)}</span>
+            <span>{user?.schoolName ? `EduNexus | ${user.schoolName}` : t('appName', language)}</span>
           </div>
 
           <div className="header-actions">

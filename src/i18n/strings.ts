@@ -10,9 +10,9 @@ type Translations = {
 
 const strings: Translations = {
   // Auth
-  appName: { english: 'SAMS', sinhala: 'SAMS', tamil: 'SAMS' },
-  appFullName: { english: 'Smart Academic Management System', sinhala: 'ස්මාර්ට් අධ්‍යාපනික කළමනාකරණ පද්ධතිය', tamil: 'ஸ்மார்ட் கல்வி மேலாண்மை அமைப்பு' },
-  loginTitle: { english: 'Login to SAMS', sinhala: 'SAMS වෙත ප්‍රවේශ වන්න', tamil: 'SAMS இல் உள்நுழைக' },
+  appName: { english: 'EduNexus', sinhala: 'EduNexus', tamil: 'EduNexus' },
+  appFullName: { english: 'EduNexus — Smart Academic Governance & School Management', sinhala: 'EduNexus — ස්මාර්ට් අධ්‍යාපනික සහ පාසල් කළමනාකරණ පද්ධතිය', tamil: 'EduNexus — ஸ்மார்ட் கல்வி மற்றும் பள்ளி மேலாண்மை அமைப்பு' },
+  loginTitle: { english: 'Login to EduNexus', sinhala: 'EduNexus වෙත ප්‍රවේශ වන්න', tamil: 'EduNexus இல் உள்நுழைக' },
   username: { english: 'Username', sinhala: 'පරිශීලක නාමය', tamil: 'பயனர் பெயர்' },
   password: { english: 'Password', sinhala: 'මුරපදය', tamil: 'கடவுச்சொல்' },
   login: { english: 'Login', sinhala: 'ප්‍රවේශ වන්න', tamil: 'உள்நுழைக' },

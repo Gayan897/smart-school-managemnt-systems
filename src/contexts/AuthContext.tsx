@@ -16,13 +16,14 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [language, setLang] = useState<AppLanguage>(() => {
-    return (localStorage.getItem('sams_lang') as AppLanguage) || 'english';
+    const saved = (localStorage.getItem('edunexus_lang') || localStorage.getItem('sams_lang')) as AppLanguage | null;
+    return saved || 'english';
   });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Restore session
-    const saved = localStorage.getItem('sams_user');
+    const saved = localStorage.getItem('edunexus_user') || localStorage.getItem('sams_user');
     if (saved) {
       try {
         setUser(JSON.parse(saved));
@@ -50,18 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!found) throw new Error('User not found. Please check your username.');
     if (found.password !== password) throw new Error('Incorrect password.');
     setUser(found);
-    localStorage.setItem('sams_user', JSON.stringify(found));
+    localStorage.setItem('edunexus_user', JSON.stringify(found));
     return found;
   }
 
   function logout() {
     setUser(null);
+    localStorage.removeItem('edunexus_user');
     localStorage.removeItem('sams_user');
   }
 
   function setLanguage(lang: AppLanguage) {
     setLang(lang);
-    localStorage.setItem('sams_lang', lang);
+    localStorage.setItem('edunexus_lang', lang);
   }
 
   return (

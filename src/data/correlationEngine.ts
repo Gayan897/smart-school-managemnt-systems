@@ -331,7 +331,7 @@ export function generatePredictiveParentAlert(profile: StudentCorrelationProfile
   const studentName = profile.student.name;
   const cleanPhone = (profile.student.parentContact || '').replace(/[^0-9+]/g, '');
 
-  let text = `🚨 *SAMS PREDICTIVE ACADEMIC RADAR ALERT* 🚨\n\nDear Parent/Guardian,\n\nOur AI Academic Early Warning System has detected an attendance risk for *${studentName}* (Class: ${profile.classRoom}).\n\n📊 *Attendance & Predicted Grade Impact*:\n• Overall Attendance: *${profile.overallAttendanceRate}%* (${profile.totalAbsences} absent days)\n`;
+  let text = `🚨 *EDUNEXUS PREDICTIVE ACADEMIC RADAR ALERT* 🚨\n\nDear Parent/Guardian,\n\nOur AI Academic Early Warning System has detected an attendance risk for *${studentName}* (Class: ${profile.classRoom}).\n\n📊 *Attendance & Predicted Grade Impact*:\n• Overall Attendance: *${profile.overallAttendanceRate}%* (${profile.totalAbsences} absent days)\n`;
 
   const topRisks = targetSubject
     ? profile.subjectRisks.filter(s => s.subject === targetSubject)
@@ -351,7 +351,7 @@ export function generatePredictiveParentAlert(profile: StudentCorrelationProfile
     });
   }
 
-  text += `\n💡 *Action Needed*: Please ensure regular class attendance. Contact the school to arrange remedial worksheets before upcoming exams.\n\n— SAMS Academic Counseling Division`;
+  text += `\n💡 *Action Needed*: Please ensure regular class attendance. Contact the school to arrange remedial worksheets before upcoming exams.\n\n— EduNexus Academic Counseling Division`;
 
   const encoded = encodeURIComponent(text);
   const whatsappUrl = cleanPhone ? `https://wa.me/${cleanPhone.replace('+', '')}?text=${encoded}` : `https://wa.me/?text=${encoded}`;

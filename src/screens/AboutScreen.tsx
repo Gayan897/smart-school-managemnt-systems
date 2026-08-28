@@ -94,7 +94,7 @@ const TEAM = [
 
 /* ─── Timeline milestones ─── */
 const MILESTONES = [
-  { year: '2021', title: 'SAMS Founded', desc: 'Started as a small attendance tool for a single school in Colombo.' },
+  { year: '2021', title: 'EduNexus Founded', desc: 'Started as a small attendance tool for a single school in Colombo.' },
   { year: '2022', title: 'Multi-School Rollout', desc: 'Expanded to 15 schools, added leave management and timetables.' },
   { year: '2023', title: 'Mobile App Launch', desc: 'Flutter-based mobile app released; biometric check-in introduced.' },
   { year: '2024', title: 'AI-Powered Insights', desc: 'Performance analytics and the University Advisor module launched.' },
@@ -126,13 +126,13 @@ export default function AboutScreen() {
       <section className="about-hero">
         <div className="about-hero-bg" />
         <div className="about-hero-content">
-          <div className="about-label">ABOUT SAMS</div>
+          <div className="about-label">ABOUT EDUNEXUS</div>
           <h1 className="about-hero-headline">
             BUILT FOR<br />
             <span className="about-hero-accent">EDUCATORS.</span>
           </h1>
           <p className="about-hero-desc">
-            SAMS started in 2021 as a single classroom attendance tool. Today we're a
+            EduNexus started in 2021 as a single classroom attendance tool. Today we're a
             full academic management platform trusted by 500+ schools across Sri Lanka
             and South Asia — processing millions of attendance records every term.
           </p>
@@ -169,7 +169,7 @@ export default function AboutScreen() {
       <div className="about-stats-bar" ref={statsRef}>
         <StatItem value={500}  suffix="+"  label="Schools onboarded"     start={statsVisible} />
         <div className="about-stats-divider" />
-        <StatItem value={12000} suffix="+" label="Educators using SAMS"  start={statsVisible} />
+        <StatItem value={12000} suffix="+" label="Educators using EduNexus"  start={statsVisible} />
         <div className="about-stats-divider" />
         <StatItem value={98}   suffix="%"  label="Attendance accuracy"   start={statsVisible} />
         <div className="about-stats-divider" />
@@ -185,9 +185,9 @@ export default function AboutScreen() {
               FROM ONE CLASS<br />TO EVERY SCHOOL.
             </h2>
             <p className="about-story-para">
-              Priya Ratnayake began building SAMS while teaching at a rural school outside
+              Priya Ratnayake began building EduNexus while teaching at a rural school outside
               Kandy. Marking attendance on paper every morning took 10 minutes per class —
-              time that should have been spent teaching. She wrote the first version of SAMS
+              time that should have been spent teaching. She wrote the first version of EduNexus
               in a weekend.
             </p>
             <p className="about-story-para">
@@ -197,7 +197,7 @@ export default function AboutScreen() {
               multilingual app designed for Sri Lanka's education system.
             </p>
             <p className="about-story-para">
-              At SAMS we don't call it school software. We call it giving educators
+              At EduNexus we don't call it school software. We call it giving educators
               back the time they deserve — every single day.
             </p>
             <div className="about-story-highlights">
@@ -220,7 +220,7 @@ export default function AboutScreen() {
                 <div className="about-quote-avatar" style={{ background: '#0284c7' }}>P</div>
                 <div>
                   <div className="about-quote-name">Priya Ratnayake</div>
-                  <div className="about-quote-role">Founder, SAMS</div>
+                  <div className="about-quote-role">Founder, EduNexus</div>
                 </div>
               </div>
             </div>
@@ -293,7 +293,7 @@ export default function AboutScreen() {
       >
         <div className="about-section-header">
           <div className="about-label">THE TEAM</div>
-          <h2 className="about-section-title center">People Behind SAMS</h2>
+          <h2 className="about-section-title center">People Behind EduNexus</h2>
           <p className="about-section-sub center">
             Educators, engineers, and designers united by one mission.
           </p>
@@ -321,7 +321,7 @@ export default function AboutScreen() {
           <div className="about-label" style={{ color: '#38bdf8' }}>JOIN US</div>
           <h2 className="about-cta-title">Ready to transform<br />your school's admin?</h2>
           <p className="about-cta-sub">
-            Join 500+ schools already saving hours every week with SAMS.
+            Join 500+ schools already saving hours every week with EduNexus.
             No credit card required. Setup in under 10 minutes.
           </p>
           <div className="about-cta-actions">
@@ -336,7 +336,7 @@ export default function AboutScreen() {
           </div>
           <div className="about-cta-trust">
             <Users size={14} />
-            <span>12,000+ educators trust SAMS</span>
+            <span>12,000+ educators trust EduNexus</span>
           </div>
         </div>
       </section>

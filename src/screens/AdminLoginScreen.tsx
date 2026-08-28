@@ -87,7 +87,7 @@ export default function AdminLoginScreen() {
           <div className="auth-logo" style={{ background: '#7c3aed' }}>
             <Building2 size={36} color="#fff" />
           </div>
-          <div className="auth-app-name" style={{ color: '#c4b5fd' }}>SAMS ADMIN</div>
+          <div className="auth-app-name" style={{ color: '#c4b5fd' }}>EDUNEXUS ADMIN</div>
           <p className="auth-tagline">Ministry of Education • Zonal Command Portal</p>
           <div className="auth-features" style={{ marginTop: '24px' }}>
             <div className="auth-feature">

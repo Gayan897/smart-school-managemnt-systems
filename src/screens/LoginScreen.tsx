@@ -54,7 +54,7 @@ export default function LoginScreen() {
           <div className="auth-logo">
             <GraduationCap size={40} color="#fff" />
           </div>
-          <div className="auth-app-name">SAMS</div>
+          <div className="auth-app-name">EduNexus</div>
           <p className="auth-tagline">{t('appFullName', language)}</p>
           <div className="auth-features">
             {['Attendance Tracking', 'Leave Management', 'Performance Reports', 'Timetable Management'].map(f => (

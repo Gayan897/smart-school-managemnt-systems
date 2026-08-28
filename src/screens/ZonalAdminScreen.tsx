@@ -163,15 +163,15 @@ export default function ZonalAdminScreen() {
   }
 
   function triggerNativeEmail(school: GovernmentSchool, email: string, inviteUrl: string) {
-    const subject = `🏛️ [OFFICIAL DISPATCH] SAMS Portal Authorization Key - ${school.name}`;
-    const body = `Dear Principal,\n\nOfficial Authorization Details for SAMS (School Attendance & Management System):\n\nSchool: ${school.name}\nCensus Code: ${school.censusCode}\nZonal Master Security Key: ${school.zonalSecretKey}\n\nPlease click the official registration link below to activate your Principal account:\n${inviteUrl}\n\nRegards,\nHomagama / Colombo Zonal Education Office\nMinistry of Education, Sri Lanka`;
+    const subject = `🏛️ [OFFICIAL DISPATCH] EduNexus Portal Authorization Key - ${school.name}`;
+    const body = `Dear Principal,\n\nOfficial Authorization Details for EduNexus (Smart Academic & Governance System):\n\nSchool: ${school.name}\nCensus Code: ${school.censusCode}\nZonal Master Security Key: ${school.zonalSecretKey}\n\nPlease click the official registration link below to activate your Principal account:\n${inviteUrl}\n\nRegards,\nHomagama / Colombo Zonal Education Office\nMinistry of Education, Sri Lanka`;
 
     window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   function triggerNativeSMS(school: GovernmentSchool, phone: string, inviteUrl: string) {
     const cleanPhone = phone.replace(/[^\d+]/g, '');
-    const smsBody = `MOE SAMS: Official Registration Key for ${school.name} [${school.censusCode}] is ${school.zonalSecretKey}. Register at: ${inviteUrl}`;
+    const smsBody = `MOE EDUNEXUS: Official Registration Key for ${school.name} [${school.censusCode}] is ${school.zonalSecretKey}. Register at: ${inviteUrl}`;
 
     window.open(`sms:${encodeURIComponent(cleanPhone)}?body=${encodeURIComponent(smsBody)}`, '_blank');
   }
@@ -180,8 +180,8 @@ export default function ZonalAdminScreen() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `SAMS Security Key - ${school.name}`,
-          text: `MOE SAMS Authorization: Zonal Key for ${school.name} is ${school.zonalSecretKey}. Register using this link:`,
+          title: `EduNexus Security Key - ${school.name}`,
+          text: `MOE EduNexus Authorization: Zonal Key for ${school.name} is ${school.zonalSecretKey}. Register using this link:`,
           url: inviteUrl,
         });
       } catch (e) {
@@ -649,7 +649,7 @@ export default function ZonalAdminScreen() {
                       <strong>📬 Official MoE Email Template Payload:</strong>
                       <div style={{ color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.4 }}>
                         To: <code>{dispatchEmail}</code><br />
-                        Subject: 🏛️ [OFFICIAL DISPATCH] SAMS Security Key - {dispatchSchool.name}<br />
+                        Subject: 🏛️ [OFFICIAL DISPATCH] EduNexus Security Key - {dispatchSchool.name}<br />
                         Notice: Key is <strong>{dispatchSchool.zonalSecretKey}</strong>. Click magic link to activate Principal account.
                       </div>
                     </div>

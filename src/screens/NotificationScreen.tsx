@@ -519,7 +519,7 @@ export default function NotificationScreen() {
                 {(newNotice.targetRole === 'parent' || newNotice.targetRole === 'student') && (
                   <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ color: '#10b981', fontWeight: 700 }}>⚡ LIVE</span>
-                    This notice will be pushed instantly to parents &amp; students on the SAMS mobile app.
+                    This notice will be pushed instantly to parents &amp; students on the EduNexus mobile app.
                   </p>
                 )}
               </div>

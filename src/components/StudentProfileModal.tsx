@@ -656,7 +656,7 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
           alignItems: 'center',
         }}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            SAMS Digital Academic Record
+            EduNexus Digital Academic Record
           </span>
           <button className="btn btn-secondary" onClick={onClose}>
             Close Profile
