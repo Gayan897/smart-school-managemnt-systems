@@ -325,17 +325,21 @@ export interface Notice {
 export function isNoticeRelevantToUser(notice: Notice, user: User | null): boolean {
   if (!user) return false;
 
+  const target = notice.targetRole || 'all';
+
   // 1. Zonal master admin sees all notices
   if (user.role === 'zonal_admin') return true;
 
-  // 2. Strict School Census Code check:
+  // 2. Block zonal_admin-only notices from principals and teachers (e.g. KEY REQUEST, approval workflows)
+  if (target === 'zonal_admin') return false;
+
+  // 3. Strict School Census Code check:
   // If notice has a specific school census code, it MUST match user's school census code
   if (notice.schoolCensusCode && user.schoolCensusCode && notice.schoolCensusCode !== user.schoolCensusCode) {
     return false;
   }
 
-  // 3. Target Role check:
-  const target = notice.targetRole || 'all';
+  // 4. Target Role check
   if (target === 'all') return true;
   if (user.role === 'principal' && target === 'principal') return true;
   if (user.role === 'teacher' && target === 'teacher') return true;
