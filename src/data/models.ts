@@ -114,6 +114,7 @@ export interface User {
   nicVerificationStatus?: 'pending' | 'verified' | 'rejected';
   verificationUnlockAt?: number; // timestamp in ms when login becomes enabled
   registeredAt?: string; // ISO string
+  classRoom?: string; // Homeroom class assigned at registration (e.g. "10A")
 }
 
 export interface Student {

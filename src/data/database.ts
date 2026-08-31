@@ -135,7 +135,7 @@ export const databaseService = {
       id: user.id,
       name: user.name,
       subject: 'Not assigned',
-      classRoom: 'Not assigned',
+      classRoom: user.classRoom || 'Not assigned',
       casualBalance: 7,
       medicalBalance: 14,
       annualBalance: 21,

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight, ArrowLeft, Mail, Smartphone, Send, X, Bell, CheckCircle } from 'lucide-react';
+import { GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight, ArrowLeft, Mail, Smartphone, Send, X, Bell, CheckCircle, ScanLine } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { User, UserRole, GovernmentSchool } from '../data/models';
+import { verifyNicImages } from '../data/nicVerification';
+import type { User, UserRole, GovernmentSchool, SchoolClass } from '../data/models';
 import '../components/AppShell.css';
 import landingBg from '../assets/landing_bg.png';
 
@@ -23,6 +24,10 @@ export default function SignupScreen() {
   // School Selection
   const [schools, setSchools] = useState<GovernmentSchool[]>([]);
   const [selectedSchoolCode, setSelectedSchoolCode] = useState('10421'); // Default: Mahinda Rajapaksha College
+
+  // Class Selection (Teacher only)
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
+  const [selectedClassRoom, setSelectedClassRoom] = useState('');
 
   // Principal Verification Details
   const [zonalSecretKey, setZonalSecretKey] = useState('');
@@ -55,6 +60,10 @@ export default function SignupScreen() {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // NIC AI Verification scanning state
+  const [nicVerifying, setNicVerifying] = useState(false);
+  const [nicVerifyStep, setNicVerifyStep] = useState('');
 
   // Teacher NIC Verification Photo State
   const [teacherNicFront, setTeacherNicFront] = useState<string>('');
@@ -91,11 +100,16 @@ export default function SignupScreen() {
     const qKey = searchParams.get('key');
     const qEmail = searchParams.get('email');
 
-    databaseService.getZonalSchools().then(data => {
-      setSchools(data);
+    Promise.all([
+      databaseService.getZonalSchools(),
+      databaseService.getClasses(),
+    ]).then(([schoolData, classData]) => {
+      setSchools(schoolData);
+      const sorted = [...classData].sort((a, b) => a.id.localeCompare(b.id));
+      setClasses(sorted);
 
       if (qCensusCode && qKey) {
-        const matchedSchool = data.find(s => s.censusCode === qCensusCode);
+        const matchedSchool = schoolData.find(s => s.censusCode === qCensusCode);
         setSelectedSchoolCode(qCensusCode);
         setReqSchoolCode(qCensusCode);
         setZonalSecretKey(qKey.toUpperCase());
@@ -107,11 +121,11 @@ export default function SignupScreen() {
           setEmail(qEmail);
           setReqPrincipalEmail(qEmail);
         }
-      } else if (data.length > 0) {
-        setSelectedSchoolCode(data[0].censusCode);
-        setReqSchoolCode(data[0].censusCode);
+      } else if (schoolData.length > 0) {
+        setSelectedSchoolCode(schoolData[0].censusCode);
+        setReqSchoolCode(schoolData[0].censusCode);
       }
-    }).catch(err => console.error('Failed to load schools:', err));
+    }).catch(err => console.error('Failed to load data:', err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -281,6 +295,35 @@ export default function SignupScreen() {
         if (!teacherNicFront || !teacherNicBack) {
           throw new Error('Please upload both Front and Back photos of your NIC for verification.');
         }
+
+        // --- AI-Powered NIC Image Verification ---
+        setNicVerifying(true);
+        setNicVerifyStep('🔍 Scanning NIC images with AI...');
+        let nicResult;
+        try {
+          nicResult = await verifyNicImages(cleanNic, teacherNicFront, teacherNicBack);
+        } catch (verifyErr) {
+          throw verifyErr; // re-throw — already has a user-friendly message
+        } finally {
+          setNicVerifying(false);
+          setNicVerifyStep('');
+        }
+
+        if (!nicResult.isValidNic) {
+          throw new Error(
+            `❌ NIC Verification Failed: The uploaded images do not appear to be a valid Sri Lanka National Identity Card. ${nicResult.reason ? `Reason: ${nicResult.reason}` : 'Please upload clear photos of your NIC front and back.'}`
+          );
+        }
+
+        if (!nicResult.nicNumberMatch) {
+          const extracted = nicResult.extractedNicNumber
+            ? ` (Card shows: ${nicResult.extractedNicNumber})`
+            : '';
+          throw new Error(
+            `❌ NIC Number Mismatch: The NIC number you entered (${cleanNic}) does not match the number on the card${extracted}. Please re-enter your NIC number correctly or upload the correct NIC photos.`
+          );
+        }
+        // Verification passed ✅
       } else if (role === 'principal') {
         if (!zonalSecretKey.trim()) {
           throw new Error('Zonal Master Security Key is required for Principal registration.');
@@ -323,6 +366,7 @@ export default function SignupScreen() {
           nicVerificationStatus: 'pending',
           verificationUnlockAt: unlockTime,
           registeredAt: new Date().toISOString(),
+          ...(selectedClassRoom ? { classRoom: selectedClassRoom } : {}),
         } : {}),
       };
 
@@ -674,6 +718,25 @@ export default function SignupScreen() {
                   </div>
                 </div>
 
+                {/* Homeroom Class Selection */}
+                <div className="form-group" style={{ marginTop: '12px', marginBottom: '10px' }}>
+                  <label className="form-label" style={{ fontSize: '11px' }}>Homeroom Class <span style={{ color: '#6b7280', fontWeight: 400 }}>(optional)</span></label>
+                  <select
+                    className="form-control"
+                    value={selectedClassRoom}
+                    onChange={e => setSelectedClassRoom(e.target.value)}
+                    style={{ fontSize: '13px' }}
+                  >
+                    <option value="">— Not assigned yet —</option>
+                    {classes.map(cls => (
+                      <option key={cls.id} value={cls.id}>
+                        Class {cls.id} — Grade {cls.grade}{cls.stream === 'al' ? ' (A/L)' : ' (O/L)'}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '3px' }}>Select the class you will be a homeroom teacher for.</div>
+                </div>
+
                 <div style={{ fontSize: '10.5px', color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '6px 8px', borderRadius: '6px', lineHeight: 1.35 }}>
                   💡 <strong>Automated Verification:</strong> Provide your NIC number and Front & Back photos. Upon validation, a 2-minute security period activates before login is enabled.
                 </div>
@@ -814,17 +877,35 @@ export default function SignupScreen() {
               />
             </div>
 
+            {/* NIC AI Scanning Progress */}
+            {nicVerifying && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                background: 'linear-gradient(135deg, rgba(2,132,199,0.12), rgba(124,58,237,0.08))',
+                border: '1.5px solid rgba(2,132,199,0.35)',
+                borderRadius: '10px', padding: '12px 16px', marginTop: '8px',
+                animation: 'pulse 1.5s ease-in-out infinite'
+              }}>
+                <ScanLine size={20} color="#0284c7" style={{ flexShrink: 0, animation: 'spin 2s linear infinite' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0284c7' }}>AI NIC Verification in Progress</div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{nicVerifyStep}</div>
+                </div>
+              </div>
+            )}
+
             <button
               id="signup-submit"
               type="submit"
               className="btn btn-primary btn-lg"
               style={{ width: '100%', marginTop: '8px', background: isMagicInvite ? 'linear-gradient(135deg, #7c3aed, #0284c7)' : undefined }}
-              disabled={loading}
+              disabled={loading || nicVerifying}
             >
-              {loading ? <span className="spinner" /> : null}
-              {isZonalPortal ? 'Register Zonal Officer' : role === 'principal' ? (isMagicInvite ? '🔑 Activate Principal Account' : 'Verify & Register Principal') : 'Register Teacher'}
+              {(loading || nicVerifying) ? <span className="spinner" /> : null}
+              {nicVerifying ? 'Verifying NIC...' : isZonalPortal ? 'Register Zonal Officer' : role === 'principal' ? (isMagicInvite ? '🔑 Activate Principal Account' : 'Verify & Register Principal') : 'Register Teacher'}
             </button>
           </form>
+
 
 
 
