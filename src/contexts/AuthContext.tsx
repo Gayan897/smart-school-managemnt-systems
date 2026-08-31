@@ -50,6 +50,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (!found) throw new Error('User not found. Please check your username.');
     if (found.password !== password) throw new Error('Incorrect password.');
+
+    // Teacher NIC Verification Check
+    if (found.role === 'teacher' && found.nicVerificationStatus === 'pending') {
+      const now = Date.now();
+      const unlockAt = found.verificationUnlockAt || 0;
+      if (unlockAt > now) {
+        const diffSec = Math.ceil((unlockAt - now) / 1000);
+        const mins = Math.floor(diffSec / 60);
+        const secs = diffSec % 60;
+        const timeStr = mins > 0 ? `${mins} minute${mins > 1 ? 's' : ''} ${secs} second${secs !== 1 ? 's' : ''}` : `${secs} second${secs !== 1 ? 's' : ''}`;
+        throw new Error(
+          `🔒 Account Verification Pending: Your NIC photo match (NIC: ${found.nicNumber || 'Document'}) is verified. Login will be automatically enabled in ${timeStr} (2-minute security period).`
+        );
+      } else {
+        // Unlock time reached, auto-verify
+        found.nicVerificationStatus = 'verified';
+        await databaseService.updateUserVerificationStatus(found.id, 'verified');
+      }
+    }
+
     setUser(found);
     localStorage.setItem('edunexus_user', JSON.stringify(found));
     return found;

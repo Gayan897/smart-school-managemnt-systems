@@ -108,9 +108,26 @@ export const databaseService = {
     const q = query(usersCol, where('username', '==', clean), limit(1));
     const snapshot = await getDocs(q);
     if (!snapshot.empty) {
-      return snapshot.docs[0].data();
+      const u = snapshot.docs[0].data();
+      if (u.role === 'teacher' && u.nicVerificationStatus === 'pending' && u.verificationUnlockAt && Date.now() >= u.verificationUnlockAt) {
+        u.nicVerificationStatus = 'verified';
+        try {
+          await setDoc(doc(usersCol, u.id), cleanData<Partial<User>>({ nicVerificationStatus: 'verified' }), { merge: true });
+        } catch (e) {
+          console.warn('Failed to update verification status in firestore:', e);
+        }
+      }
+      return u;
     }
     return null;
+  },
+
+  async updateUserVerificationStatus(userId: string, status: 'pending' | 'verified' | 'rejected'): Promise<void> {
+    try {
+      await setDoc(doc(usersCol, userId), cleanData<Partial<User>>({ nicVerificationStatus: status }), { merge: true });
+    } catch (e) {
+      console.warn('Failed to update user verification status:', e);
+    }
   },
 
   async createTeacherProfile(user: User): Promise<void> {

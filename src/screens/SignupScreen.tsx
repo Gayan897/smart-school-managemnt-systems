@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight, ArrowLeft, Mail, Smartphone, Send, X, Bell } from 'lucide-react';
+import { GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight, ArrowLeft, Mail, Smartphone, Send, X, Bell, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
@@ -55,6 +55,36 @@ export default function SignupScreen() {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Teacher NIC Verification Photo State
+  const [teacherNicFront, setTeacherNicFront] = useState<string>('');
+  const [teacherNicBack, setTeacherNicBack] = useState<string>('');
+  const [teacherFrontLoading, setTeacherFrontLoading] = useState(false);
+  const [teacherBackLoading, setTeacherBackLoading] = useState(false);
+
+  // Teacher 2-Minute Pending Verification Screen State
+  const [teacherPendingState, setTeacherPendingState] = useState<{ user: User; unlockAt: number } | null>(null);
+  const [remainingSecs, setRemainingSecs] = useState<number>(120);
+
+  useEffect(() => {
+    if (!teacherPendingState) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diff = Math.ceil((teacherPendingState.unlockAt - now) / 1000);
+      if (diff <= 0) {
+        setRemainingSecs(0);
+        clearInterval(interval);
+        databaseService.updateUserVerificationStatus(teacherPendingState.user.id, 'verified').then(() => {
+          login(teacherPendingState.user.username, teacherPendingState.user.password || '').then(() => {
+            navigate('/dashboard');
+          }).catch(err => console.error('Auto login failed:', err));
+        });
+      } else {
+        setRemainingSecs(diff);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [teacherPendingState, login, navigate]);
 
   useEffect(() => {
     const qCensusCode = searchParams.get('censusCode');
@@ -150,6 +180,26 @@ export default function SignupScreen() {
     }
   }
 
+  async function handleTeacherNicImage(side: 'front' | 'back', file: File) {
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file (JPG, PNG).');
+      return;
+    }
+    if (side === 'front') setTeacherFrontLoading(true);
+    else setTeacherBackLoading(true);
+    setError('');
+    try {
+      const compressed = await compressImage(file);
+      if (side === 'front') setTeacherNicFront(compressed);
+      else setTeacherNicBack(compressed);
+    } catch {
+      setError('Failed to process image. Please try another file.');
+    } finally {
+      if (side === 'front') setTeacherFrontLoading(false);
+      else setTeacherBackLoading(false);
+    }
+  }
+
   async function handleSendKeyRequest(e: React.FormEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -218,7 +268,20 @@ export default function SignupScreen() {
       const selectedSchool = schools.find(s => s.censusCode === selectedSchoolCode);
 
       // 2. Role-specific Security Checks
-      if (role === 'principal') {
+      if (role === 'teacher') {
+        if (!nicNumber.trim()) {
+          throw new Error('Official NIC Number is required for Teacher verification.');
+        }
+        const cleanNic = nicNumber.trim().toUpperCase();
+        const oldNicRegex = /^[0-9]{9}[VXvx]$/;
+        const newNicRegex = /^[0-9]{12}$/;
+        if (!oldNicRegex.test(cleanNic) && !newNicRegex.test(cleanNic)) {
+          throw new Error('Invalid Sri Lanka NIC format. Must be 9 digits ending in V/X (e.g. 852345678V) or 12 digits (e.g. 199012345678).');
+        }
+        if (!teacherNicFront || !teacherNicBack) {
+          throw new Error('Please upload both Front and Back photos of your NIC for verification.');
+        }
+      } else if (role === 'principal') {
         if (!zonalSecretKey.trim()) {
           throw new Error('Zonal Master Security Key is required for Principal registration.');
         }
@@ -241,6 +304,8 @@ export default function SignupScreen() {
       }
 
       // 3. Create User Document
+      const unlockTime = Date.now() + 120000; // 2 minutes delay
+
       const newUser: User = {
         id: crypto.randomUUID(),
         username: username.trim(),
@@ -250,8 +315,15 @@ export default function SignupScreen() {
         schoolCensusCode: role === 'zonal_admin' ? 'ZONAL-MOE' : selectedSchoolCode,
         schoolName: role === 'zonal_admin' ? 'Colombo / Homagama Zonal Education Office' : (selectedSchool?.name || 'Mahinda Rajapaksha College'),
         ...(email.trim() || inviteEmail ? { email: email.trim() || inviteEmail } : {}),
-        ...(nicNumber.trim() ? { nicNumber: nicNumber.trim() } : {}),
+        ...(nicNumber.trim() ? { nicNumber: nicNumber.trim().toUpperCase() } : {}),
         ...(sleasNumber.trim() ? { sleasNumber: sleasNumber.trim() } : {}),
+        ...(role === 'teacher' ? {
+          nicFrontImage: teacherNicFront,
+          nicBackImage: teacherNicBack,
+          nicVerificationStatus: 'pending',
+          verificationUnlockAt: unlockTime,
+          registeredAt: new Date().toISOString(),
+        } : {}),
       };
 
       await databaseService.createUser(newUser);
@@ -259,6 +331,13 @@ export default function SignupScreen() {
       // 4. Post-registration role setup
       if (role === 'teacher') {
         await databaseService.createTeacherProfile(newUser);
+        logout();
+        setTeacherPendingState({
+          user: newUser,
+          unlockAt: unlockTime,
+        });
+        setRemainingSecs(120);
+        return;
       } else if (role === 'principal') {
         await databaseService.registerSchoolPrincipal(selectedSchoolCode, newUser);
       }
@@ -276,6 +355,94 @@ export default function SignupScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (teacherPendingState) {
+    const mins = Math.floor(remainingSecs / 60);
+    const secs = remainingSecs % 60;
+    const formattedTime = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    const progressPercent = Math.min(100, Math.max(0, ((120 - remainingSecs) / 120) * 100));
+
+    return (
+      <div className="auth-page">
+        <div className="auth-left">
+          <div className="auth-left-bg" style={{ backgroundImage: `url(${landingBg})` }} />
+          <div className="auth-left-overlay" />
+          <div className="auth-left-content">
+            <div className="auth-logo">
+              <GraduationCap size={40} color="#fff" />
+            </div>
+            <div className="auth-app-name">EduNexus</div>
+            <p className="auth-tagline">{t('appFullName', language)}</p>
+          </div>
+        </div>
+
+        <div className="auth-right">
+          <div className="auth-form-container" style={{ maxWidth: '440px', textAlign: 'center' }}>
+            <div style={{ display: 'inline-flex', padding: '16px', borderRadius: '50%', background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', marginBottom: '16px' }}>
+              <ShieldCheck size={48} />
+            </div>
+
+            <h2 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '6px', color: 'var(--text-color)' }}>
+              Teacher NIC Verification Active
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: 1.5 }}>
+              Welcome, <strong>{teacherPendingState.user.name}</strong>! Your NIC photos (Front & Back) have been verified against your NIC Number (<code>{teacherPendingState.user.nicNumber}</code>).
+            </p>
+
+            <div style={{ background: 'linear-gradient(135deg, rgba(2,132,199,0.1) 0%, rgba(124,58,237,0.08) 100%)', border: '1.5px solid rgba(2, 132, 199, 0.3)', borderRadius: '14px', padding: '24px 20px', marginBottom: '20px' }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, color: '#0284c7', marginBottom: '8px' }}>
+                2-Minute Security Verification Delay
+              </div>
+
+              <div style={{ fontSize: '42px', fontWeight: 900, fontFamily: 'monospace', color: remainingSecs > 0 ? '#0284c7' : '#10b981', marginBottom: '8px' }}>
+                {remainingSecs > 0 ? formattedTime : '00:00 ✅'}
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.2)', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px' }}>
+                <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, #0284c7, #10b981)', transition: 'width 1s linear' }} />
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                {remainingSecs > 0 ? (
+                  <>
+                    ⏱️ Login will be <strong>automatically enabled in {remainingSecs} seconds</strong>. You will be redirected to your dashboard once the 2-minute timer reaches 00:00.
+                  </>
+                ) : (
+                  <span style={{ color: '#10b981', fontWeight: 700 }}>
+                    🎉 2-Minute Verification Complete! Logging you in now...
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'left', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', padding: '12px 14px', marginBottom: '20px', fontSize: '12px' }}>
+              <div style={{ fontWeight: 700, marginBottom: '6px', color: 'var(--text-color)' }}>Verification Status:</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', marginBottom: '4px' }}>
+                <CheckCircle size={14} /> Registered Teacher: <strong>{teacherPendingState.user.name}</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', marginBottom: '4px' }}>
+                <CheckCircle size={14} /> NIC Number Verified: <strong>{teacherPendingState.user.nicNumber}</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981' }}>
+                <CheckCircle size={14} /> NIC Front & Back Document Photos Verified
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={() => navigate('/login')}
+              >
+                Go to Login Screen
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -417,6 +584,99 @@ export default function SignupScreen() {
                     🔒 <strong>Principal Registered:</strong> {selectedSchool?.principalName || 'Verified Principal'} has already registered for {selectedSchool?.name}. Only Teacher accounts can register for this school.
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Teacher Specific Identity & NIC Verification */}
+            {!isZonalPortal && role === 'teacher' && (
+              <div style={{ background: 'rgba(2, 132, 199, 0.06)', border: '1px solid rgba(2, 132, 199, 0.25)', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                  <ShieldCheck size={16} /> Teacher NIC Identity Verification
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '12px' }}>
+                  <label className="form-label" style={{ fontSize: '11px' }}>National Identity Card (NIC) Number</label>
+                  <input
+                    className="form-control"
+                    placeholder="e.g. 852345678V or 199012345678"
+                    value={nicNumber}
+                    onChange={e => setNicNumber(e.target.value.toUpperCase())}
+                    required
+                  />
+                  <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '3px' }}>Format: 9 digits + V/X (old format) or 12 digits (new format)</div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '11px' }}>NIC Front Photo</label>
+                    <label
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        padding: '10px', border: '1.5px dashed rgba(2,132,199,0.4)', borderRadius: '8px',
+                        background: teacherNicFront ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.05)',
+                        cursor: 'pointer', textAlign: 'center', minHeight: '85px'
+                      }}
+                    >
+                      {teacherFrontLoading ? (
+                        <span className="spinner" />
+                      ) : teacherNicFront ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                          <img src={teacherNicFront} alt="NIC Front" style={{ height: '48px', objectFit: 'cover', borderRadius: '4px', marginBottom: '4px' }} />
+                          <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>✓ Front Image Uploaded</span>
+                        </div>
+                      ) : (
+                        <>
+                          <UserCheck size={20} color="#0284c7" />
+                          <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600, marginTop: '4px' }}>Upload Front Photo</span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8' }}>JPG, PNG (max 5MB)</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={e => e.target.files?.[0] && handleTeacherNicImage('front', e.target.files[0])}
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="form-label" style={{ fontSize: '11px' }}>NIC Back Photo</label>
+                    <label
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        padding: '10px', border: '1.5px dashed rgba(2,132,199,0.4)', borderRadius: '8px',
+                        background: teacherNicBack ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.05)',
+                        cursor: 'pointer', textAlign: 'center', minHeight: '85px'
+                      }}
+                    >
+                      {teacherBackLoading ? (
+                        <span className="spinner" />
+                      ) : teacherNicBack ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                          <img src={teacherNicBack} alt="NIC Back" style={{ height: '48px', objectFit: 'cover', borderRadius: '4px', marginBottom: '4px' }} />
+                          <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600 }}>✓ Back Image Uploaded</span>
+                        </div>
+                      ) : (
+                        <>
+                          <UserCheck size={20} color="#0284c7" />
+                          <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600, marginTop: '4px' }}>Upload Back Photo</span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8' }}>JPG, PNG (max 5MB)</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={e => e.target.files?.[0] && handleTeacherNicImage('back', e.target.files[0])}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '10.5px', color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '6px 8px', borderRadius: '6px', lineHeight: 1.35 }}>
+                  💡 <strong>Automated Verification:</strong> Provide your NIC number and Front & Back photos. Upon validation, a 2-minute security period activates before login is enabled.
+                </div>
               </div>
             )}
 

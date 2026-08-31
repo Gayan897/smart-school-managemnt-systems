@@ -109,6 +109,11 @@ export interface User {
   schoolName?: string;
   nicNumber?: string;
   sleasNumber?: string;
+  nicFrontImage?: string;
+  nicBackImage?: string;
+  nicVerificationStatus?: 'pending' | 'verified' | 'rejected';
+  verificationUnlockAt?: number; // timestamp in ms when login becomes enabled
+  registeredAt?: string; // ISO string
 }
 
 export interface Student {

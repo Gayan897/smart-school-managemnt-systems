@@ -43,6 +43,23 @@ export default function LoginScreen() {
     }).catch(err => console.error('Failed to load schools:', err));
   }, []);
 
+  const [pendingTimerSecs, setPendingTimerSecs] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (pendingTimerSecs === null || pendingTimerSecs <= 0) return;
+    const interval = setInterval(() => {
+      setPendingTimerSecs(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          setError('🎉 2-Minute Security Delay finished! Click Login to enter your dashboard.');
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [pendingTimerSecs]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim() || !password) {
@@ -51,6 +68,7 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setError('');
+    setPendingTimerSecs(null);
     try {
       const loggedInUser = await login(username.trim(), password);
       if (loggedInUser.role === 'zonal_admin') {
@@ -59,7 +77,16 @@ export default function LoginScreen() {
         navigate('/dashboard');
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const msg = err instanceof Error ? err.message : 'Login failed';
+      setError(msg);
+      if (msg.includes('Account Verification Pending')) {
+        const matchSecs = msg.match(/(\d+)\s+second/);
+        const matchMins = msg.match(/(\d+)\s+minute/);
+        let total = 0;
+        if (matchMins) total += parseInt(matchMins[1], 10) * 60;
+        if (matchSecs) total += parseInt(matchSecs[1], 10);
+        if (total > 0) setPendingTimerSecs(total);
+      }
     } finally {
       setLoading(false);
     }
@@ -123,7 +150,34 @@ export default function LoginScreen() {
           <h1 className="auth-form-title">{t('loginTitle', language)}</h1>
           <p className="auth-form-sub">Sri Lanka Government Schools</p>
 
-          {error && <div className="auth-error">{error}</div>}
+          {error && (
+            <div
+              className="auth-error"
+              style={{
+                fontSize: '13px',
+                lineHeight: 1.5,
+                ...(pendingTimerSecs !== null
+                  ? {
+                      background: 'rgba(2, 132, 199, 0.1)',
+                      borderColor: 'rgba(2, 132, 199, 0.4)',
+                      color: '#0284c7',
+                    }
+                  : {}),
+              }}
+            >
+              <div>{error}</div>
+              {pendingTimerSecs !== null && (
+                <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(2,132,199,0.12)', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontWeight: 900, fontSize: '22px', fontFamily: 'monospace', color: '#0284c7' }}>
+                    ⏱️ {String(Math.floor(pendingTimerSecs / 60)).padStart(2, '0')}:{String(pendingTimerSecs % 60).padStart(2, '0')}
+                  </div>
+                  <div style={{ fontSize: '11px', marginTop: '2px', opacity: 0.9 }}>
+                    Automated security verification active. Please wait for the 2-minute timer to finish.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
