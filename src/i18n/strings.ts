@@ -36,6 +36,7 @@ const strings: Translations = {
   reports: { english: 'Reports', sinhala: 'වාර්තා', tamil: 'அறிக்கைகள்' },
   timetable: { english: 'Timetable', sinhala: 'කාල සටහන', tamil: 'நேர அட்டவணை' },
   classManagement: { english: 'Classes', sinhala: 'පන්ති', tamil: 'வகுப்புகள்' },
+  profile: { english: 'My Profile', sinhala: 'මගේ ගිණුම', tamil: 'என் சுயவிவரம்' },
   settings: { english: 'Settings', sinhala: 'සැකසුම්', tamil: 'அமைப்புகள்' },
 
   // Dashboard
@@ -156,9 +157,13 @@ const strings: Translations = {
   stream: { english: 'Stream', sinhala: 'ධාරාව', tamil: 'நீரோட்டம்' },
   contact: { english: 'Contact', sinhala: 'සම්බන්ධතාව', tamil: 'தொடர்பு' },
   noLeaveRequests: { english: 'No leave requests', sinhala: 'නිවාඩු ඉල්ලීම් නොමැත', tamil: 'விடுப்பு கோரிக்கைகள் இல்லை' },
-  casualLeave: { english: 'Casual', sinhala: 'සාමාන්‍ය', tamil: 'சாதாரண' },
-  medicalLeave: { english: 'Medical', sinhala: 'වෛද්‍ය', tamil: 'மருத்துவ' },
-  annualLeave: { english: 'Annual', sinhala: 'වාර්ෂික', tamil: 'வருடாந்திர' },
+  casualLeave: { english: 'Casual Leave', sinhala: 'සාමාන්‍ය නිවාඩු', tamil: 'Casual Leave' },
+  medicalLeave: { english: 'Medical Leave', sinhala: 'වෛද්‍ය නිවාඩු', tamil: 'Medical Leave' },
+  annualLeave: { english: 'Annual Leave', sinhala: 'වාර්ෂික නිවාඩු', tamil: 'Annual Leave' },
+  half_casual: { english: 'Half Day (Casual)', sinhala: 'අර්ධ දින (සාමාන්‍ය)', tamil: 'Half Day (Casual)' },
+  half_medical: { english: 'Half Day (Medical)', sinhala: 'අර්ධ දින (වෛද්‍ය)', tamil: 'Half Day (Medical)' },
+  half_annual: { english: 'Half Day (Annual)', sinhala: 'අර්ධ දින (වාර්ෂික)', tamil: 'Half Day (Annual)' },
+  half_day: { english: 'Half Day', sinhala: 'අර්ධ දිනය', tamil: 'Half Day' },
   days: { english: 'days', sinhala: 'දින', tamil: 'நாட்கள்' },
 
   // EduPub Portal

@@ -4,7 +4,7 @@ import { GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight, Ar
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { verifyNicImages } from '../data/nicVerification';
+import { verifyNicImages, validateSriLankaNic } from '../data/nicVerification';
 import type { User, UserRole, GovernmentSchool, SchoolClass } from '../data/models';
 import '../components/AppShell.css';
 import landingBg from '../assets/landing_bg.png';
@@ -287,11 +287,19 @@ export default function SignupScreen() {
           throw new Error('Official NIC Number is required for Teacher verification.');
         }
         const cleanNic = nicNumber.trim().toUpperCase();
-        const oldNicRegex = /^[0-9]{9}[VXvx]$/;
-        const newNicRegex = /^[0-9]{12}$/;
-        if (!oldNicRegex.test(cleanNic) && !newNicRegex.test(cleanNic)) {
-          throw new Error('Invalid Sri Lanka NIC format. Must be 9 digits ending in V/X (e.g. 852345678V) or 12 digits (e.g. 199012345678).');
+
+        // Check if NIC format is valid
+        const validation = validateSriLankaNic(cleanNic);
+        if (!validation.isValid) {
+          throw new Error(validation.reason || 'Invalid Sri Lanka NIC format.');
         }
+
+        // Check for duplicate registered NIC in database
+        const existingNicUser = await databaseService.getUserByNic(cleanNic);
+        if (existingNicUser) {
+          throw new Error(`NIC Number (${cleanNic}) is already registered to an existing user account (${existingNicUser.name}).`);
+        }
+
         if (!teacherNicFront || !teacherNicBack) {
           throw new Error('Please upload both Front and Back photos of your NIC for verification.');
         }

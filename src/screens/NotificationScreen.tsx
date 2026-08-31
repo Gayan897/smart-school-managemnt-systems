@@ -7,7 +7,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { Notice, NoticeTargetRole } from '../data/models';
+import { isNoticeRelevantToUser, type Notice, type NoticeTargetRole } from '../data/models';
 
 export default function NotificationScreen() {
   const { user, language } = useAuth();
@@ -120,40 +120,33 @@ export default function NotificationScreen() {
 
   // Filtering Logic
   const filteredNotices = notices.filter(n => {
-    // Search query filter
+    // 1. Core relevance check (Role & School Census Code isolation)
+    if (!isNoticeRelevantToUser(n, user)) return false;
+
+    // 2. Search query filter
     const matchesSearch =
       n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       n.body.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (n.authorName && n.authorName.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    // Category filter
+    // 3. Category filter
     const matchesCategory = selectedCategory === 'all' || n.category === selectedCategory;
 
-    // Priority filter
+    // 4. Priority filter
     const matchesPriority = selectedPriority === 'all' || (n.priority || 'normal') === selectedPriority;
 
-    // Audience filter (Must match user's role or 'all', or manual dropdown filter)
+    // 5. Manual audience filter dropdown
     const roleTarget = n.targetRole || 'all';
-    let isRelevantToUser = false;
-    if (user?.role === 'zonal_admin') {
-      isRelevantToUser = roleTarget === 'all' || roleTarget === 'principal' || roleTarget === 'zonal_admin';
-    } else if (user?.role === 'principal') {
-      isRelevantToUser = true;
-    } else {
-      isRelevantToUser = roleTarget === 'all' || roleTarget === user?.role;
-    }
-
-    const matchesAudience =
-      selectedAudience === 'all'
-        ? isRelevantToUser
-        : roleTarget === selectedAudience;
+    const matchesAudience = selectedAudience === 'all' || roleTarget === selectedAudience;
 
     return matchesSearch && matchesCategory && matchesPriority && matchesAudience;
   });
 
-  const totalUrgent = notices.filter(n => (user?.role !== 'zonal_admin' || (n.targetRole || 'all') === 'all' || n.targetRole === 'principal' || n.targetRole === 'zonal_admin') && n.priority === 'urgent').length;
-  const totalLeaveReqs = notices.filter(n => (user?.role !== 'zonal_admin' || (n.targetRole || 'all') === 'all' || n.targetRole === 'principal' || n.targetRole === 'zonal_admin') && n.category === 'Leave Request').length;
-  const totalForUser = notices.filter(n => user?.role === 'zonal_admin' ? ((n.targetRole || 'all') === 'all' || n.targetRole === 'principal' || n.targetRole === 'zonal_admin') : ((n.targetRole || 'all') === 'all' || n.targetRole === user?.role || user?.role === 'principal')).length;
+  const schoolNotices = notices.filter(n => isNoticeRelevantToUser(n, user));
+
+  const totalUrgent = schoolNotices.filter(n => n.priority === 'urgent').length;
+  const totalLeaveReqs = schoolNotices.filter(n => n.category === 'Leave Request').length;
+  const totalForUser = schoolNotices.length;
 
   return (
     <div className="page">
@@ -304,7 +297,28 @@ export default function NotificationScreen() {
         <div className="card empty-state" style={{ padding: '60px 20px', textAlign: 'center' }}>
           <Bell size={48} style={{ opacity: 0.25, marginBottom: '16px' }} />
           <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>{t('noNotificationsFound', language)}</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Try resetting your search or filter parameters.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '16px' }}>
+            No matching notifications. Try resetting your search or filter parameters.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('all');
+                setSelectedPriority('all');
+                setSelectedAudience('all');
+              }}
+            >
+              Reset Filters
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => setShowCreateModal(true)}
+            >
+              <Plus size={14} /> Create Notice
+            </button>
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

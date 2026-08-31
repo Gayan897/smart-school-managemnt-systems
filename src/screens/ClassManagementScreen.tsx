@@ -6,7 +6,7 @@ import { databaseService } from '../data/database';
 import type { SchoolClass, Teacher } from '../data/models';
 
 export default function ClassManagementScreen() {
-  const { language } = useAuth();
+  const { user, language } = useAuth();
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,9 +16,10 @@ export default function ClassManagementScreen() {
   const [filter, setFilter] = useState<'all' | 'ol' | 'al'>('all');
 
   async function load() {
+    const userSchoolCode = user?.role === 'zonal_admin' ? undefined : user?.schoolCensusCode;
     const [cls, tc] = await Promise.all([
       databaseService.getClasses(),
-      databaseService.getTeachers(),
+      databaseService.getTeachers(userSchoolCode),
     ]);
     setClasses(cls);
     setTeachers(tc);

@@ -18,6 +18,7 @@ import ProxyEngineScreen from './screens/ProxyEngineScreen';
 import CorrelationRadarScreen from './screens/CorrelationRadarScreen';
 import ZonalAdminScreen from './screens/ZonalAdminScreen';
 import AdminLoginScreen from './screens/AdminLoginScreen';
+import ProfileScreen from './screens/ProfileScreen';
 import './index.css';
 
 function LoadingScreen() {
@@ -164,6 +165,13 @@ function AppRoutes() {
         element={
           !user ? <Navigate to="/login" replace /> :
           <AppShell><UniversityAdvisorScreen /></AppShell>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          !user ? <Navigate to="/login" replace /> :
+          <AppShell><ProfileScreen /></AppShell>
         }
       />
 

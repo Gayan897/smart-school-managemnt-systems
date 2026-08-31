@@ -11,6 +11,136 @@ const getGeminiApiKey = (): string => {
   return import.meta.env.VITE_GEMINI_API_KEY || '';
 };
 
+export interface NicValidationDetail {
+  isValid: boolean;
+  format: 'old' | 'new' | 'unknown';
+  birthYear?: number;
+  gender?: 'Male' | 'Female';
+  dayOfYear?: number;
+  reason?: string;
+}
+
+/**
+ * Validates Sri Lanka National Identity Card (NIC) mathematical format rules:
+ * - Old format (10 chars): 9 digits ending in V or X (e.g. 852345678V)
+ *   - Day digits 001-366 (Male) or 501-866 (Female)
+ *   - Serial 0000 is invalid
+ * - New format (12 chars): 12 digits (e.g. 199012345678)
+ *   - Birth year 1900 to currentYear - 16
+ *   - Day digits 001-366 (Male) or 501-866 (Female)
+ *   - Serial 00000 is invalid
+ */
+export function validateSriLankaNic(nicNumber: string): NicValidationDetail {
+  const clean = nicNumber.trim().toUpperCase();
+
+  const oldMatch = clean.match(/^([0-9]{2})([0-9]{3})([0-9]{4})([VX])$/);
+  if (oldMatch) {
+    const yy = parseInt(oldMatch[1], 10);
+    const dayDigits = parseInt(oldMatch[2], 10);
+    const serial = oldMatch[3];
+
+    let gender: 'Male' | 'Female' = 'Male';
+    let dayOfYear = dayDigits;
+
+    if (dayDigits >= 501 && dayDigits <= 866) {
+      gender = 'Female';
+      dayOfYear = dayDigits - 500;
+    } else if (dayDigits < 1 || dayDigits > 366) {
+      return {
+        isValid: false,
+        format: 'old',
+        reason: `Invalid day-of-year (${dayDigits}) in 9-digit NIC. Sri Lanka NIC day digits must be between 001-366 (Male) or 501-866 (Female).`,
+      };
+    }
+
+    if (dayOfYear < 1 || dayOfYear > 366) {
+      return {
+        isValid: false,
+        format: 'old',
+        reason: `Invalid day-of-year (${dayOfYear}) encoded in NIC number.`,
+      };
+    }
+
+    if (serial === '0000') {
+      return {
+        isValid: false,
+        format: 'old',
+        reason: 'Invalid NIC serial number (0000 is not allowed).',
+      };
+    }
+
+    const birthYear = 1900 + yy;
+
+    return {
+      isValid: true,
+      format: 'old',
+      birthYear,
+      gender,
+      dayOfYear,
+    };
+  }
+
+  const newMatch = clean.match(/^([0-9]{4})([0-9]{3})([0-9]{5})$/);
+  if (newMatch) {
+    const yyyy = parseInt(newMatch[1], 10);
+    const dayDigits = parseInt(newMatch[2], 10);
+    const serial = newMatch[3];
+
+    const currentYear = new Date().getFullYear();
+    if (yyyy < 1900 || yyyy > currentYear - 16) {
+      return {
+        isValid: false,
+        format: 'new',
+        reason: `Invalid birth year (${yyyy}) in 12-digit NIC.`,
+      };
+    }
+
+    let gender: 'Male' | 'Female' = 'Male';
+    let dayOfYear = dayDigits;
+
+    if (dayDigits >= 501 && dayDigits <= 866) {
+      gender = 'Female';
+      dayOfYear = dayDigits - 500;
+    } else if (dayDigits < 1 || dayDigits > 366) {
+      return {
+        isValid: false,
+        format: 'new',
+        reason: `Invalid day-of-year (${dayDigits}) in 12-digit NIC. Sri Lanka NIC day digits must be between 001-366 (Male) or 501-866 (Female).`,
+      };
+    }
+
+    if (dayOfYear < 1 || dayOfYear > 366) {
+      return {
+        isValid: false,
+        format: 'new',
+        reason: `Invalid day-of-year (${dayOfYear}) encoded in NIC number.`,
+      };
+    }
+
+    if (serial === '00000') {
+      return {
+        isValid: false,
+        format: 'new',
+        reason: 'Invalid NIC serial number (00000 is not allowed).',
+      };
+    }
+
+    return {
+      isValid: true,
+      format: 'new',
+      birthYear: yyyy,
+      gender,
+      dayOfYear,
+    };
+  }
+
+  return {
+    isValid: false,
+    format: 'unknown',
+    reason: 'Invalid Sri Lanka NIC format. Must be 9 digits ending in V/X (e.g. 852345678V) or 12 digits (e.g. 199012345678).',
+  };
+}
+
 export interface NicVerificationResult {
   isValidNic: boolean;
   extractedNicNumber: string | null;
@@ -29,7 +159,7 @@ function parseDataUrl(dataUrl: string): { data: string; mimeType: string } {
 }
 
 /**
- * Verifies NIC images using Gemini Vision with local fallback if unconfigured.
+ * Verifies NIC images using Gemini Vision with strict local format & image validation.
  *
  * @param enteredNicNumber - The NIC number typed by the user
  * @param frontImageDataUrl - Base64 data URL of the NIC front photo
@@ -41,32 +171,54 @@ export async function verifyNicImages(
   backImageDataUrl: string,
 ): Promise<NicVerificationResult> {
   const apiKey = getGeminiApiKey();
-
-  const front = parseDataUrl(frontImageDataUrl);
-  const back = parseDataUrl(backImageDataUrl);
   const cleanNic = enteredNicNumber.trim().toUpperCase();
 
-  const oldNicRegex = /^[0-9]{9}[VX]$/;
-  const newNicRegex = /^[0-9]{12}$/;
-  const isValidNicFormat = oldNicRegex.test(cleanNic) || newNicRegex.test(cleanNic);
+  // 1. Strict Sri Lanka NIC Format & Mathematical Check
+  const validation = validateSriLankaNic(cleanNic);
+  if (!validation.isValid) {
+    return {
+      isValidNic: false,
+      extractedNicNumber: null,
+      nicNumberMatch: false,
+      confidence: 'low',
+      reason: validation.reason || 'Invalid Sri Lanka NIC number format.',
+    };
+  }
 
-  // If NIC verification service API key is not configured, fall back to local format validation
+  // 2. Validate Front and Back Image Upload Data
+  let front: { data: string; mimeType: string };
+  let back: { data: string; mimeType: string };
+  try {
+    front = parseDataUrl(frontImageDataUrl);
+    back = parseDataUrl(backImageDataUrl);
+  } catch (err) {
+    return {
+      isValidNic: false,
+      extractedNicNumber: null,
+      nicNumberMatch: false,
+      confidence: 'low',
+      reason: err instanceof Error ? err.message : 'Invalid NIC photo uploads.',
+    };
+  }
+
+  if (!front.data || front.data.length < 100 || !back.data || back.data.length < 100) {
+    return {
+      isValidNic: false,
+      extractedNicNumber: null,
+      nicNumberMatch: false,
+      confidence: 'low',
+      reason: 'Uploaded NIC photos are corrupt or incomplete. Please upload clear front and back NIC photos.',
+    };
+  }
+
+  // If NIC verification service API key is not configured or placeholder, fall back to strict format check
   if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY') {
-    if (!isValidNicFormat) {
-      return {
-        isValidNic: false,
-        extractedNicNumber: null,
-        nicNumberMatch: false,
-        confidence: 'low',
-        reason: 'The entered NIC number does not match standard Sri Lankan NIC format (9 digits ending in V/X or 12 digits).',
-      };
-    }
     return {
       isValidNic: true,
       extractedNicNumber: cleanNic,
       nicNumberMatch: true,
       confidence: 'medium',
-      reason: 'Verified using local format check (AI verification key not configured).',
+      reason: `Verified Sri Lanka NIC format (${validation.format.toUpperCase()} NIC, Year: ${validation.birthYear}, Gender: ${validation.gender}).`,
     };
   }
 
@@ -121,19 +273,13 @@ Rules:
     });
   } catch (networkErr) {
     console.error('Gemini network error:', networkErr);
-    // Graceful fallback if network fails but local NIC format is valid
-    if (isValidNicFormat) {
-      return {
-        isValidNic: true,
-        extractedNicNumber: cleanNic,
-        nicNumberMatch: true,
-        confidence: 'low',
-        reason: 'Verified via local format validation (Network error reaching AI service).',
-      };
-    }
-    throw new Error(
-      'Cannot reach the NIC verification service. Please check your internet connection and try again.',
-    );
+    return {
+      isValidNic: true,
+      extractedNicNumber: cleanNic,
+      nicNumberMatch: true,
+      confidence: 'low',
+      reason: 'Verified via strict Sri Lanka NIC format check (AI service offline).',
+    };
   }
 
   if (!response.ok) {
@@ -141,50 +287,36 @@ Rules:
     console.error('Gemini API error response:', response.status, errBody);
 
     if (response.status === 400 || response.status === 403) {
-      if (isValidNicFormat) {
-        return {
-          isValidNic: true,
-          extractedNicNumber: cleanNic,
-          nicNumberMatch: true,
-          confidence: 'low',
-          reason: 'Verified via local format validation (API key issue).',
-        };
-      }
-      throw new Error(
-        'NIC verification failed: the API key may be invalid or the image format is unsupported.',
-      );
-    }
-    if (response.status === 429) {
-      if (isValidNicFormat) {
-        return {
-          isValidNic: true,
-          extractedNicNumber: cleanNic,
-          nicNumberMatch: true,
-          confidence: 'low',
-          reason: 'Verified via local format validation (AI service rate-limited).',
-        };
-      }
-      throw new Error('NIC verification service is temporarily busy. Please wait a moment and try again.');
-    }
-    if (isValidNicFormat) {
       return {
         isValidNic: true,
         extractedNicNumber: cleanNic,
         nicNumberMatch: true,
         confidence: 'low',
-        reason: 'Verified via local format validation (AI service error).',
+        reason: 'Verified via strict Sri Lanka NIC format check (AI service key error).',
       };
     }
-    throw new Error(
-      `NIC verification service error (HTTP ${response.status}). Please try again or contact support.`,
-    );
+    if (response.status === 429) {
+      return {
+        isValidNic: true,
+        extractedNicNumber: cleanNic,
+        nicNumberMatch: true,
+        confidence: 'low',
+        reason: 'Verified via strict Sri Lanka NIC format check (AI service rate-limited).',
+      };
+    }
+    return {
+      isValidNic: true,
+      extractedNicNumber: cleanNic,
+      nicNumberMatch: true,
+      confidence: 'low',
+      reason: 'Verified via strict Sri Lanka NIC format check (AI service temporarily unavailable).',
+    };
   }
 
   const responseData = await response.json();
   const rawText: string =
     responseData?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
-  // Strip any accidental markdown fences Gemini might add despite instructions
   const cleaned = rawText
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/i, '')
@@ -195,34 +327,26 @@ Rules:
     result = JSON.parse(cleaned);
   } catch {
     console.error('Failed to parse Gemini NIC verification response:', rawText);
-    if (isValidNicFormat) {
-      return {
-        isValidNic: true,
-        extractedNicNumber: cleanNic,
-        nicNumberMatch: true,
-        confidence: 'low',
-        reason: 'Verified via local format check after AI response parsing failure.',
-      };
-    }
-    throw new Error(
-      'NIC verification returned an unexpected response. Please try again.',
-    );
+    return {
+      isValidNic: true,
+      extractedNicNumber: cleanNic,
+      nicNumberMatch: true,
+      confidence: 'low',
+      reason: 'Verified via strict format check after AI response parsing failure.',
+    };
   }
 
-  // Sanity-check the parsed object
   if (typeof result.isValidNic !== 'boolean') {
-    if (isValidNicFormat) {
-      return {
-        isValidNic: true,
-        extractedNicNumber: cleanNic,
-        nicNumberMatch: true,
-        confidence: 'low',
-        reason: 'Verified via local format check after invalid AI result format.',
-      };
-    }
-    throw new Error('NIC verification returned an invalid result. Please try again.');
+    return {
+      isValidNic: true,
+      extractedNicNumber: cleanNic,
+      nicNumberMatch: true,
+      confidence: 'low',
+      reason: 'Verified via strict format check after invalid AI result format.',
+    };
   }
 
   return result;
 }
+
 

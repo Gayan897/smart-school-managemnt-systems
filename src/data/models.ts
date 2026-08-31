@@ -1,8 +1,42 @@
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 export type LeaveStatus = 'pending' | 'approved' | 'rejected';
-export type LeaveType = 'casual' | 'medical' | 'annual' | 'duty';
+export type LeaveType = 'casual' | 'medical' | 'annual' | 'duty' | 'half_casual' | 'half_medical' | 'half_annual' | 'half_day';
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+
+export function calculateLeaveDays(startDate: string, endDate: string, type?: LeaveType | string, isHalfDay?: boolean): number {
+  if (isHalfDay || (type && type.toString().startsWith('half'))) {
+    return 0.5;
+  }
+  if (!startDate || !endDate) return 1;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = end.getTime() - start.getTime();
+  if (isNaN(diffTime) || diffTime < 0) return 1;
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  return diffDays > 0 ? diffDays : 1;
+}
+
+export interface LeaveRequest {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  type: LeaveType;
+  isHalfDay?: boolean;
+  halfDaySession?: 'morning' | 'afternoon';
+  startDate: string; // ISO String (yyyy-MM-dd)
+  endDate: string;   // ISO String (yyyy-MM-dd)
+  reason: string;
+  status: LeaveStatus;
+  principalComment?: string | null;
+  lessonPlanNotes?: string | null; // Study material or lesson instructions left for substitute teacher
+  submittedAt: string; // ISO String
+  schoolCensusCode?: string;
+  schoolName?: string;
+  remainingCasualAfterApproval?: number;
+  remainingMedicalAfterApproval?: number;
+  remainingAnnualAfterApproval?: number;
+}
 export type UserRole = 'zonal_admin' | 'principal' | 'teacher';
 export type ClassStream = 'ol' | 'al';
 export type AppLanguage = 'english' | 'sinhala' | 'tamil';
@@ -123,6 +157,8 @@ export interface Student {
   classRoom: string; // e.g. "10A"
   grade: string;     // e.g. "10"
   parentContact: string;
+  schoolCensusCode?: string;
+  schoolName?: string;
 }
 
 export interface Teacher {
@@ -133,6 +169,8 @@ export interface Teacher {
   casualBalance: number;
   medicalBalance: number;
   annualBalance: number;
+  schoolCensusCode?: string;
+  schoolName?: string;
 }
 
 export interface SchoolClass {
@@ -280,6 +318,29 @@ export interface Notice {
   authorName?: string;
   authorRole?: UserRole;
   priority?: 'normal' | 'high' | 'urgent';
+  schoolCensusCode?: string;
+  schoolName?: string;
+}
+
+export function isNoticeRelevantToUser(notice: Notice, user: User | null): boolean {
+  if (!user) return false;
+
+  // 1. Zonal master admin sees all notices
+  if (user.role === 'zonal_admin') return true;
+
+  // 2. Strict School Census Code check:
+  // If notice has a specific school census code, it MUST match user's school census code
+  if (notice.schoolCensusCode && user.schoolCensusCode && notice.schoolCensusCode !== user.schoolCensusCode) {
+    return false;
+  }
+
+  // 3. Target Role check:
+  const target = notice.targetRole || 'all';
+  if (target === 'all') return true;
+  if (user.role === 'principal' && target === 'principal') return true;
+  if (user.role === 'teacher' && target === 'teacher') return true;
+
+  return false;
 }
 
 export interface ZonalKeyRequest {

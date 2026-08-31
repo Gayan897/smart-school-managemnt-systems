@@ -3,16 +3,17 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, FileText, BarChart2,
   Clock, LogOut, Menu, X, Globe, ChevronDown, GraduationCap,
-  Sun, Moon, BookOpen, Bell, Sparkles, Activity, Building2
+  Sun, Moon, BookOpen, Bell, Sparkles, Activity, Building2, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { AppLanguage } from '../data/models';
+import { isNoticeRelevantToUser, type AppLanguage } from '../data/models';
 
 const NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
+  { to: '/profile', icon: UserIcon, key: 'profile' },
   { to: '/admin', icon: Building2, key: 'zonalAdmin', label: 'Zonal Admin Panel', zonalAdminOnly: true },
   { to: '/notifications', icon: Bell, key: 'notifications' },
   { to: '/attendance', icon: Calendar, key: 'attendance' },
@@ -36,12 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsub = databaseService.subscribeToNotices(
       (notices) => {
-        const relevantCount = notices.filter(
-          n => (n.targetRole || 'all') === 'all' ||
-               n.targetRole === user?.role ||
-               user?.role === 'principal' ||
-               user?.role === 'zonal_admin'
-        ).length;
+        const relevantCount = notices.filter(n => isNoticeRelevantToUser(n, user ?? null)).length;
         setNotifCount(relevantCount);
       },
       (err) => console.error('Failed to subscribe to notice count:', err)
@@ -127,7 +123,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="user-info">
+          <div
+            className="user-info"
+            onClick={() => { navigate('/profile'); setSidebarOpen(false); }}
+            style={{ cursor: 'pointer', borderRadius: '8px', padding: '6px', transition: 'background 0.2s' }}
+            title="Click to view & edit profile"
+          >
             <div className="user-avatar">{user?.name?.[0]?.toUpperCase() ?? 'U'}</div>
             <div className="user-details">
               <div className="user-name">{user?.name}</div>

@@ -9,6 +9,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<User>;
   logout: () => void;
   setLanguage: (lang: AppLanguage) => void;
+  updateUserSession: (updatedUser: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -26,7 +27,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('edunexus_user') || localStorage.getItem('sams_user');
     if (saved) {
       try {
-        setUser(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (parsed && !parsed.schoolCensusCode && parsed.role === 'zonal_admin') {
+          parsed.schoolCensusCode = 'ZONAL-MOE';
+          parsed.schoolName = 'Colombo / Homagama Zonal Education Office';
+        }
+        setUser(parsed);
       } catch { /* ignore */ }
     }
     setIsLoading(false);
@@ -50,6 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (!found) throw new Error('User not found. Please check your username.');
     if (found.password !== password) throw new Error('Incorrect password.');
+
+    if (!found.schoolCensusCode && found.role === 'zonal_admin') {
+      found.schoolCensusCode = 'ZONAL-MOE';
+      found.schoolName = 'Colombo / Homagama Zonal Education Office';
+    }
 
     // Teacher NIC Verification Check
     if (found.role === 'teacher' && found.nicVerificationStatus === 'pending') {
@@ -75,6 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return found;
   }
 
+  function updateUserSession(updatedUser: User) {
+    setUser(updatedUser);
+    localStorage.setItem('edunexus_user', JSON.stringify(updatedUser));
+  }
+
   function logout() {
     setUser(null);
     localStorage.removeItem('edunexus_user');
@@ -87,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, language, isLoading, login, logout, setLanguage }}>
+    <AuthContext.Provider value={{ user, language, isLoading, login, logout, setLanguage, updateUserSession }}>
       {children}
     </AuthContext.Provider>
   );

@@ -4,7 +4,7 @@ import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserChec
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { Notice, Student, Teacher, LeaveRequest, AttendanceRecord, ProxyAssignment, ZonalKeyRequest } from '../data/models';
+import { isNoticeRelevantToUser, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ProxyAssignment, type ZonalKeyRequest } from '../data/models';
 
 export default function DashboardScreen() {
   const { user, language } = useAuth();
@@ -17,12 +17,14 @@ export default function DashboardScreen() {
   const [pendingKeyRequests, setPendingKeyRequests] = useState<ZonalKeyRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const userSchoolCode = user?.role === 'zonal_admin' ? undefined : user?.schoolCensusCode;
+
   useEffect(() => {
     // Fetch students, teachers, leave requests once
     Promise.all([
-      databaseService.getStudents(),
-      databaseService.getTeachers(),
-      databaseService.getLeaveRequests(),
+      databaseService.getStudents(userSchoolCode),
+      databaseService.getTeachers(userSchoolCode),
+      databaseService.getLeaveRequests(userSchoolCode),
       databaseService.getProxyAssignments(),
     ]).then(([s, tc, l, p]) => {
       setStudents(s);
@@ -39,7 +41,7 @@ export default function DashboardScreen() {
 
     // Real-time notices subscription
     const unsubNotices = databaseService.subscribeToNotices((data) => {
-      setNotices(data.slice(0, 5));
+      setNotices(data);
     });
 
     // Real-time proxy subscription
@@ -58,25 +60,43 @@ export default function DashboardScreen() {
       unsubProxy();
       unsubKeyReqs();
     };
-  }, []);
+  }, [userSchoolCode]);
+
+  const isZonalAdmin = user?.role === 'zonal_admin';
+  const currentSchoolCode = user?.schoolCensusCode;
 
   const today = new Date().toISOString().split('T')[0];
   const presentToday = attendance.filter(a =>
     a.date.startsWith(today) && a.status === 'present'
   ).length;
-  const pendingLeave = leaveReqs.filter(l => l.status === 'pending').length;
+
+  const displayLeaveReqs = isZonalAdmin
+    ? leaveReqs
+    : leaveReqs.filter(l => l.schoolCensusCode === currentSchoolCode);
+
+  const pendingLeave = displayLeaveReqs.filter(l => l.status === 'pending').length;
+
+  const displayStudents = isZonalAdmin
+    ? students
+    : students.filter(s => s.schoolCensusCode === currentSchoolCode);
+
+  const displayTeachers = isZonalAdmin
+    ? teachers
+    : teachers.filter(t => t.schoolCensusCode === currentSchoolCode);
+
+  const relevantNotices = notices.filter(n => isNoticeRelevantToUser(n, user ?? null)).slice(0, 5);
 
   const stats = [
     {
       label: t('totalStudents', language),
-      value: students.length,
+      value: displayStudents.length,
       icon: GraduationCap,
       color: '#0284c7',
       bg: 'rgba(2,132,199,0.15)',
     },
     {
       label: t('totalTeachers', language),
-      value: teachers.length,
+      value: displayTeachers.length,
       icon: Users,
       color: '#0d9488',
       bg: 'rgba(13,148,136,0.15)',
@@ -116,6 +136,12 @@ export default function DashboardScreen() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{t('welcome', language)}, {user?.name?.split(' ')[0] ?? ''}! </h1>
+          {user?.schoolName && user.role !== 'zonal_admin' && (
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>🏫 {user.schoolName}</span>
+              {user.schoolCensusCode && <span style={{ opacity: 0.8 }}>(Census Code: {user.schoolCensusCode})</span>}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
             <p className="page-subtitle" style={{ margin: 0 }}>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
             <span style={{
@@ -206,14 +232,14 @@ export default function DashboardScreen() {
               <ArrowRight size={14} />
             </Link>
           </div>
-          {notices.length === 0 ? (
+          {relevantNotices.length === 0 ? (
             <div className="empty-state" style={{ padding: '30px 0' }}>
               <Bell size={32} style={{ marginBottom: '8px', opacity: 0.3 }} />
               <p>{t('noNotices', language)}</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {notices.map(n => (
+              {relevantNotices.map(n => (
                 <div key={n.id} style={{
                   padding: '14px',
                   background: 'var(--bg-hover)',

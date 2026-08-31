@@ -90,9 +90,88 @@ export const PERMANENT_ZONAL_ADMIN: User = {
   sleasNumber: 'SLEAS-DIR-001',
 };
 
+export const defaultNotices: Notice[] = [
+  {
+    id: 'notice_sys_01',
+    title: '📘 Ministry of Education Circular 2026/01: Academic Term & Exam Schedule',
+    body: 'Official Announcement: All provincial and zonal schools in Sri Lanka must adhere to the 2026 Academic Calendar. Term 1 examinations will commence as per Ministry instructions. School heads must ensure attendance logging and proxy assignment accuracy.',
+    date: new Date(Date.now() - 3600000 * 2).toISOString(),
+    category: 'Academic',
+    targetRole: 'all',
+    priority: 'high',
+    authorName: 'Ministry of Education',
+    authorRole: 'zonal_admin',
+  },
+  {
+    id: 'notice_sys_02',
+    title: '📚 EduPub Textbook & Teacher Guide Distribution Notice',
+    body: 'Educational Publications Department (edupub.gov.lk) digital textbooks and teacher guides for Grades 1 to 13 are now accessible directly within EduNexus via the EduPub Portal tab. Teachers are advised to verify syllabus coverage.',
+    date: new Date(Date.now() - 3600000 * 8).toISOString(),
+    category: 'General',
+    targetRole: 'all',
+    priority: 'normal',
+    authorName: 'EduPub Department',
+    authorRole: 'zonal_admin',
+  },
+  {
+    id: 'notice_sys_03',
+    title: '🚨 Teacher Attendance & Leave Application Guidelines',
+    body: 'Teachers applying for Casual, Medical, Annual, or Half-Day leave must submit requests at least 24 hours prior to leave start date whenever possible. Lesson plan instructions for substitute teachers should be attached in the Leave portal.',
+    date: new Date(Date.now() - 3600000 * 24).toISOString(),
+    category: 'Administrative',
+    targetRole: 'teacher',
+    priority: 'urgent',
+    authorName: 'Principal Office',
+    authorRole: 'principal',
+  },
+  {
+    id: 'notice_sys_04',
+    title: '🎓 University Z-Score & Stream Selection Advisor Tool Activated',
+    body: 'The EduNexus University Advisor module is live. O/L and A/L stream coordinators can utilize the pathway analyzer for student career guidance across Sri Lankan public universities.',
+    date: new Date(Date.now() - 3600000 * 48).toISOString(),
+    category: 'Academic',
+    targetRole: 'all',
+    priority: 'normal',
+    authorName: 'Zonal Administration',
+    authorRole: 'zonal_admin',
+  },
+];
+
 export const databaseService = {
   async createUser(user: User): Promise<void> {
     await setDoc(doc(usersCol, user.id), cleanData(user));
+  },
+
+  async updateUserProfile(userId: string, updates: Partial<User> & { subject?: string; classRoom?: string }): Promise<User> {
+    const userRef = doc(usersCol, userId);
+    const userSnapshot = await getDocs(query(usersCol, where('id', '==', userId), limit(1)));
+    let currentUser: User | null = null;
+    if (!userSnapshot.empty) {
+      currentUser = userSnapshot.docs[0].data();
+    }
+
+    const { subject, classRoom, ...userUpdates } = updates;
+
+    // Update users collection
+    await setDoc(userRef, cleanData(userUpdates), { merge: true });
+
+    // Update teachers collection if applicable
+    if (currentUser?.role === 'teacher' || subject !== undefined || classRoom !== undefined) {
+      const teacherRef = doc(teachersCol, userId);
+      await setDoc(teacherRef, cleanData({
+        name: updates.name,
+        subject,
+        classRoom,
+      }), { merge: true });
+    }
+
+    const updatedUser: User = {
+      ...(currentUser || {} as User),
+      ...userUpdates,
+      ...(classRoom ? { classRoom } : {}),
+    };
+
+    return updatedUser;
   },
 
   async getUserByUsername(username: string): Promise<User | null> {
@@ -119,6 +198,38 @@ export const databaseService = {
       }
       return u;
     }
+
+    // Secondary check: look up user by NIC number
+    const qNic = query(usersCol, where('nicNumber', '==', clean.toUpperCase()), limit(1));
+    const snapshotNic = await getDocs(qNic);
+    if (!snapshotNic.empty) {
+      const u = snapshotNic.docs[0].data();
+      if (u.role === 'teacher' && u.nicVerificationStatus === 'pending' && u.verificationUnlockAt && Date.now() >= u.verificationUnlockAt) {
+        u.nicVerificationStatus = 'verified';
+        try {
+          await setDoc(doc(usersCol, u.id), cleanData<Partial<User>>({ nicVerificationStatus: 'verified' }), { merge: true });
+        } catch (e) {
+          console.warn('Failed to update verification status in firestore:', e);
+        }
+      }
+      return u;
+    }
+
+    return null;
+  },
+
+  async getUserByNic(nicNumber: string): Promise<User | null> {
+    const clean = nicNumber.trim().toUpperCase();
+    if (!clean) return null;
+    try {
+      const q = query(usersCol, where('nicNumber', '==', clean), limit(1));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        return snapshot.docs[0].data();
+      }
+    } catch (e) {
+      console.warn('Error querying user by NIC:', e);
+    }
     return null;
   },
 
@@ -139,11 +250,13 @@ export const databaseService = {
       casualBalance: 7,
       medicalBalance: 14,
       annualBalance: 21,
+      schoolCensusCode: user.schoolCensusCode,
+      schoolName: user.schoolName,
     };
     await setDoc(doc(teachersCol, user.id), cleanData(teacher));
   },
 
-  async getTeachers(): Promise<Teacher[]> {
+  async getTeachers(schoolCensusCode?: string): Promise<Teacher[]> {
     const userSnap = await getDocs(query(usersCol, where('role', '==', 'teacher')));
     const teacherSnap = await getDocs(teachersCol);
 
@@ -152,7 +265,7 @@ export const databaseService = {
       teacherDocs[doc.id] = doc.data();
     });
 
-    return userSnap.docs.map((doc) => {
+    const teachers = userSnap.docs.map((doc) => {
       const u = doc.data();
       const t = teacherDocs[doc.id];
       return {
@@ -163,13 +276,27 @@ export const databaseService = {
         casualBalance: t?.casualBalance ?? 7,
         medicalBalance: t?.medicalBalance ?? 14,
         annualBalance: t?.annualBalance ?? 21,
+        schoolCensusCode: u.schoolCensusCode || t?.schoolCensusCode || undefined,
+        schoolName: u.schoolName || t?.schoolName || undefined,
       };
     });
+
+    if (schoolCensusCode) {
+      return teachers.filter(t => t.schoolCensusCode === schoolCensusCode);
+    }
+
+    return teachers;
   },
 
-  async getStudents(): Promise<Student[]> {
+  async getStudents(schoolCensusCode?: string): Promise<Student[]> {
     const snapshot = await getDocs(studentsCol);
-    return snapshot.docs.map((doc) => doc.data());
+    const students = snapshot.docs.map((doc) => doc.data());
+
+    if (schoolCensusCode) {
+      return students.filter(s => s.schoolCensusCode === schoolCensusCode);
+    }
+
+    return students;
   },
 
   async createStudent(student: Student): Promise<void> {
@@ -218,14 +345,36 @@ export const databaseService = {
     };
   },
 
-  async getLeaveRequests(): Promise<LeaveRequest[]> {
+  async getLeaveRequests(schoolCensusCode?: string): Promise<LeaveRequest[]> {
     const snapshot = await getDocs(leaveRequestsCol);
-    return snapshot.docs.map((doc) => doc.data());
+    const rawRequests = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+
+    // Build teacherId -> schoolCensusCode map from users collection
+    const userSnap = await getDocs(query(usersCol, where('role', '==', 'teacher')));
+    const teacherSchoolMap: Record<string, string> = {};
+    userSnap.forEach((doc) => {
+      const u = doc.data();
+      if (u.id && u.schoolCensusCode) {
+        teacherSchoolMap[u.id] = u.schoolCensusCode;
+      }
+    });
+
+    const requests = rawRequests.map(r => ({
+      ...r,
+      schoolCensusCode: r.schoolCensusCode || teacherSchoolMap[r.teacherId] || undefined,
+    }));
+
+    if (schoolCensusCode) {
+      const filtered = requests.filter(r => r.schoolCensusCode === schoolCensusCode);
+      return filtered.sort((a, b) => new Date(b.submittedAt || b.startDate).getTime() - new Date(a.submittedAt || a.startDate).getTime());
+    }
+
+    return requests.sort((a, b) => new Date(b.submittedAt || b.startDate).getTime() - new Date(a.submittedAt || a.startDate).getTime());
   },
 
   async insertLeaveRequest(request: LeaveRequest): Promise<void> {
     await setDoc(doc(leaveRequestsCol, request.id), cleanData(request));
-    // Automatically generate notification for Principal
+    // Automatically generate notification for Principal of that school
     const notice: Notice = {
       id: `notice_leave_${request.id}`,
       title: `Leave Request: ${request.teacherName}`,
@@ -236,25 +385,92 @@ export const databaseService = {
       authorName: request.teacherName,
       authorRole: 'teacher',
       priority: 'urgent',
+      schoolCensusCode: request.schoolCensusCode,
+      schoolName: request.schoolName,
     };
     await setDoc(doc(noticesCol, notice.id), cleanData(notice));
   },
 
-  async updateLeaveRequest(request: LeaveRequest): Promise<void> {
-    await setDoc(doc(leaveRequestsCol, request.id), cleanData(request), { merge: true });
+  async updateLeaveRequest(request: LeaveRequest): Promise<LeaveRequest> {
+    let updatedReq = { ...request };
+
+    // If approved, deduct leave from teacher's balances in teachersCol and record remaining balances
+    if (request.status === 'approved' && request.teacherId) {
+      try {
+        const teacherRef = doc(teachersCol, request.teacherId);
+
+        // Calculate days to deduct
+        const isHalf = request.isHalfDay || request.type.toString().startsWith('half');
+        let days = 1;
+        if (isHalf) {
+          days = 0.5;
+        } else if (request.startDate && request.endDate) {
+          const start = new Date(request.startDate);
+          const end = new Date(request.endDate);
+          const diff = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          days = diff > 0 ? diff : 1;
+        }
+
+        // Fetch current teacher balance
+        const allTeachers = await this.getTeachers();
+        const tObj = allTeachers.find(t => t.id === request.teacherId);
+
+        const currentCasual = tObj?.casualBalance ?? 7;
+        const currentMedical = tObj?.medicalBalance ?? 14;
+        const currentAnnual = tObj?.annualBalance ?? 21;
+
+        let newCasual = currentCasual;
+        let newMedical = currentMedical;
+        let newAnnual = currentAnnual;
+
+        const baseType = request.type.toString().replace(/^half_/, '');
+        if (baseType === 'casual') {
+          newCasual = Math.max(0, currentCasual - days);
+        } else if (baseType === 'medical') {
+          newMedical = Math.max(0, currentMedical - days);
+        } else if (baseType === 'annual') {
+          newAnnual = Math.max(0, currentAnnual - days);
+        }
+
+        updatedReq = {
+          ...updatedReq,
+          remainingCasualAfterApproval: newCasual,
+          remainingMedicalAfterApproval: newMedical,
+          remainingAnnualAfterApproval: newAnnual,
+        };
+
+        await setDoc(teacherRef, cleanData<Partial<Teacher>>({
+          casualBalance: newCasual,
+          medicalBalance: newMedical,
+          annualBalance: newAnnual,
+        }), { merge: true });
+      } catch (e) {
+        console.warn('Failed to update teacher leave balance on Firestore:', e);
+      }
+    }
+
+    await setDoc(doc(leaveRequestsCol, request.id), cleanData(updatedReq), { merge: true });
+
+    const remInfo = updatedReq.remainingCasualAfterApproval !== undefined
+      ? `\nUpdated Remaining Balances -> Casual: ${updatedReq.remainingCasualAfterApproval} days, Medical: ${updatedReq.remainingMedicalAfterApproval} days, Annual: ${updatedReq.remainingAnnualAfterApproval} days.`
+      : '';
+
     // Automatically generate notification for Teacher
     const notice: Notice = {
       id: `notice_leave_decision_${request.id}_${Date.now()}`,
-      title: `Leave Request ${request.status.toUpperCase()}: ${request.type.toUpperCase()} Leave`,
-      body: `Leave request for ${request.teacherName} (${request.startDate} to ${request.endDate}) has been ${request.status.toUpperCase()} by the Principal.${request.principalComment ? `\nComment: ${request.principalComment}` : ''}`,
+      title: `Leave Request ${request.status.toUpperCase()}: ${request.type.toString().replace('_', ' ').toUpperCase()} Leave`,
+      body: `Leave request for ${request.teacherName} (${request.startDate} to ${request.endDate}${request.isHalfDay ? ' [Half Day]' : ''}) has been ${request.status.toUpperCase()} by the Principal.${request.principalComment ? `\nComment: ${request.principalComment}` : ''}${remInfo}`,
       date: new Date().toISOString(),
       category: 'Leave Request',
       targetRole: 'teacher',
       authorName: 'Principal Office',
       authorRole: 'principal',
       priority: request.status === 'approved' ? 'high' : 'urgent',
+      schoolCensusCode: request.schoolCensusCode,
+      schoolName: request.schoolName,
     };
     await setDoc(doc(noticesCol, notice.id), cleanData(notice));
+    return updatedReq;
   },
 
   async getAttendance(): Promise<AttendanceRecord[]> {
@@ -382,28 +598,24 @@ export const databaseService = {
     const snapshot = await getDocs(timetableCol);
     return snapshot.docs.map((doc) => doc.data());
   },
-
   async getNotices(): Promise<Notice[]> {
     const snapshot = await getDocs(noticesCol);
     if (snapshot.empty) {
-      return [];
-    }
-
-    const mockNoticeIds = new Set(['n1', 'n2', 'n3', 'n4']);
-    const notices: Notice[] = [];
-
-    for (const d of snapshot.docs) {
-      const data = d.data();
-      if (mockNoticeIds.has(d.id) || mockNoticeIds.has(data.id)) {
-        deleteDoc(doc(noticesCol, d.id)).catch((err) =>
-          console.error('Clean up mock notice error:', d.id, err)
-        );
-      } else {
-        notices.push(data);
+      // Seed default system notices
+      try {
+        const batch = writeBatch(db);
+        for (const n of defaultNotices) {
+          batch.set(doc(noticesCol, n.id), cleanData(n));
+        }
+        await batch.commit();
+      } catch (e) {
+        console.warn('Failed to seed default notices:', e);
       }
+      return defaultNotices;
     }
 
-    return notices.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const notices: Notice[] = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+    return notices.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   },
 
   async createNotice(notice: Notice): Promise<void> {
@@ -481,8 +693,6 @@ export const databaseService = {
     await setDoc(doc(noticesCol, notice.id), cleanData(notice));
   },
 
-  // ─── Real-time Subscriptions (onSnapshot) ──────────────────────────────────
-
   /**
    * Subscribe to real-time updates for the notices collection.
    * Fires immediately with current data, then again on every change.
@@ -492,17 +702,23 @@ export const databaseService = {
     callback: (notices: Notice[]) => void,
     onError?: (err: Error) => void
   ): Unsubscribe {
-    const mockNoticeIds = new Set(['n1', 'n2', 'n3', 'n4']);
     return onSnapshot(
       noticesCol,
-      (snap) => {
-        const notices: Notice[] = [];
-        for (const d of snap.docs) {
-          const data = d.data();
-          if (!mockNoticeIds.has(d.id) && !mockNoticeIds.has(data.id ?? '')) {
-            notices.push({ ...data, id: d.id });
+      async (snap) => {
+        if (snap.empty) {
+          try {
+            const batch = writeBatch(db);
+            for (const n of defaultNotices) {
+              batch.set(doc(noticesCol, n.id), cleanData(n));
+            }
+            await batch.commit();
+          } catch (e) {
+            console.warn('Failed to seed default notices on snapshot:', e);
           }
+          callback(defaultNotices);
+          return;
         }
+        const notices: Notice[] = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
         notices.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
         callback(notices);
       },
