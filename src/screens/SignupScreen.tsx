@@ -51,9 +51,9 @@ export default function SignupScreen() {
   const [reqNicNumber, setReqNicNumber] = useState('');
   const [reqSchoolCode, setReqSchoolCode] = useState('10421');
   const [reqNicFront, setReqNicFront] = useState<string>(''); // base64 compressed
-  const [reqNicBack, setReqNicBack]  = useState<string>(''); // base64 compressed
+  const [reqNicBack, setReqNicBack] = useState<string>(''); // base64 compressed
   const [nicFrontLoading, setNicFrontLoading] = useState(false);
-  const [nicBackLoading, setNicBackLoading]  = useState(false);
+  const [nicBackLoading, setNicBackLoading] = useState(false);
   const [requestingKey, setRequestingKey] = useState(false);
   const [requestSuccessMsg, setRequestSuccessMsg] = useState('');
   const [modalError, setModalError] = useState('');
@@ -126,7 +126,7 @@ export default function SignupScreen() {
         setReqSchoolCode(schoolData[0].censusCode);
       }
     }).catch(err => console.error('Failed to load data:', err));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedSchool = schools.find(s => s.censusCode === selectedSchoolCode);
@@ -645,7 +645,7 @@ export default function SignupScreen() {
                 <div style={{ fontWeight: 700, fontSize: '13px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
                   <ShieldCheck size={16} /> Teacher NIC Identity Verification
                 </div>
-                
+
                 <div className="form-group" style={{ marginBottom: '12px' }}>
                   <label className="form-label" style={{ fontSize: '11px' }}>National Identity Card (NIC) Number</label>
                   <input
