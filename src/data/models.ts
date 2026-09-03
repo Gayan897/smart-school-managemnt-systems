@@ -37,7 +37,7 @@ export interface LeaveRequest {
   remainingMedicalAfterApproval?: number;
   remainingAnnualAfterApproval?: number;
 }
-export type UserRole = 'zonal_admin' | 'principal' | 'teacher';
+export type UserRole = 'zonal_admin' | 'principal' | 'teacher' | 'student' | 'parent';
 export type ClassStream = 'ol' | 'al';
 export type AppLanguage = 'english' | 'sinhala' | 'tamil';
 export type ALStream = 'bioScience' | 'mathsScience' | 'commerce' | 'technology' | 'arts';
@@ -141,6 +141,10 @@ export interface User {
   role: UserRole;
   schoolCensusCode?: string;
   schoolName?: string;
+  admissionNumber?: string; // School admission number (for student & parent)
+  studentId?: string;       // Linked student document ID
+  parentContact?: string;
+  studentGrade?: string;
   nicNumber?: string;
   sleasNumber?: string;
   nicFrontImage?: string;
@@ -153,12 +157,17 @@ export interface User {
 
 export interface Student {
   id: string;
+  admissionNumber?: string; // Unique school admission number (e.g. "ADM-74892" or "74892")
   name: string;
   classRoom: string; // e.g. "10A"
   grade: string;     // e.g. "10"
   parentContact: string;
+  parentEmail?: string;
   schoolCensusCode?: string;
   schoolName?: string;
+  registeredAt?: string;
+  isStudentRegistered?: boolean;
+  isParentRegistered?: boolean;
 }
 
 export interface Teacher {
@@ -343,6 +352,8 @@ export function isNoticeRelevantToUser(notice: Notice, user: User | null): boole
   if (target === 'all') return true;
   if (user.role === 'principal' && target === 'principal') return true;
   if (user.role === 'teacher' && target === 'teacher') return true;
+  if (user.role === 'student' && target === 'student') return true;
+  if (user.role === 'parent' && target === 'parent') return true;
 
   return false;
 }

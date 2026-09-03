@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Save, UserPlus, Eye, AlertTriangle, GraduationCap,
-  RefreshCw, UserCheck, MessageSquare, Send, PhoneCall, Check, ExternalLink, X
+  RefreshCw, UserCheck, MessageSquare, Send, PhoneCall, Check, ExternalLink, X,
+  Trash2, Copy, Sparkles, Smartphone, Share2, ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
@@ -43,11 +44,22 @@ export default function AttendanceScreen() {
   // Add student state (teacher only)
   const [showAddModal, setShowAddModal] = useState(false);
   const [newStudentId, setNewStudentId] = useState('');
+  const [newAdmissionNumber, setNewAdmissionNumber] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentClass, setNewStudentClass] = useState('');
   const [newParentContact, setNewParentContact] = useState('');
+  const [newParentEmail, setNewParentEmail] = useState('');
   const [addingStudent, setAddingStudent] = useState(false);
   const [addStudentError, setAddStudentError] = useState('');
+
+  // Recently added student for immediate credential / admission sharing
+  const [recentlyAddedStudent, setRecentlyAddedStudent] = useState<Student | null>(null);
+  const [copiedAdmission, setCopiedAdmission] = useState(false);
+
+  // Remove student confirmation state
+  const [studentToRemove, setStudentToRemove] = useState<Student | null>(null);
+  const [removingStudent, setRemovingStudent] = useState(false);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
   // Load classes, students, teachers on mount; subscribe to attendance in real-time
   useEffect(() => {
@@ -182,10 +194,13 @@ export default function AttendanceScreen() {
   function openAddModal() {
     const classToAssign = selectedClass || (classes.length > 0 ? classes[0].id : '10A');
     const autoId = databaseService.generateStudentId(classToAssign, allStudents);
+    const randomAdm = databaseService.generateRandomAdmissionNumber(allStudents);
     setNewStudentId(autoId);
+    setNewAdmissionNumber(randomAdm);
     setNewStudentName('');
     setNewStudentClass(classToAssign);
     setNewParentContact('');
+    setNewParentEmail('');
     setAddStudentError('');
     setShowAddModal(true);
   }
@@ -196,41 +211,96 @@ export default function AttendanceScreen() {
     setNewStudentId(autoId);
   }
 
+  function handleRegenerateAdmission() {
+    const randomAdm = databaseService.generateRandomAdmissionNumber(allStudents);
+    setNewAdmissionNumber(randomAdm);
+  }
+
   async function handleAddStudent(e: React.FormEvent) {
     e.preventDefault();
     const classToAssign = newStudentClass || selectedClass;
-    if (!newStudentId.trim() || !newStudentName.trim() || !classToAssign || !newParentContact.trim()) {
-      setAddStudentError('Please fill in all fields.');
+    if (!newStudentId.trim() || !newAdmissionNumber.trim() || !newStudentName.trim() || !classToAssign || !newParentContact.trim()) {
+      setAddStudentError('Please fill in all required fields (Student ID, Admission #, Name, and Parent Contact).');
       return;
     }
     setAddingStudent(true);
     setAddStudentError('');
     try {
-      const exists = allStudents.some(s => s.id.toLowerCase() === newStudentId.trim().toLowerCase());
-      if (exists) {
-        throw new Error(t('studentIdExists', language));
+      const cleanId = newStudentId.trim().toUpperCase();
+      const cleanAdm = newAdmissionNumber.trim().toUpperCase();
+
+      const idExists = allStudents.some(s => s.id.toUpperCase() === cleanId);
+      if (idExists) {
+        throw new Error(`Student ID ${cleanId} already exists in the system.`);
+      }
+
+      const admExists = allStudents.some(s => (s.admissionNumber || '').toUpperCase() === cleanAdm);
+      if (admExists) {
+        throw new Error(`Admission Number ${cleanAdm} already exists. Please click 'Generate New' to assign another.`);
       }
 
       const clsObj = classes.find(c => c.id === classToAssign);
       const gradeVal = clsObj ? clsObj.grade.toString() : '';
 
       const newStudent: Student = {
-        id: newStudentId.trim().toUpperCase(),
+        id: cleanId,
+        admissionNumber: cleanAdm,
         name: newStudentName.trim(),
         classRoom: classToAssign,
         grade: gradeVal,
         parentContact: newParentContact.trim(),
+        ...(newParentEmail.trim() ? { parentEmail: newParentEmail.trim() } : {}),
+        schoolCensusCode: user?.schoolCensusCode,
+        schoolName: user?.schoolName,
+        registeredAt: new Date().toISOString(),
+        isStudentRegistered: false,
+        isParentRegistered: false,
       };
 
       await databaseService.createStudent(newStudent);
       const updatedStudents = await databaseService.getStudents();
       setAllStudents(updatedStudents);
       setShowAddModal(false);
+      setRecentlyAddedStudent(newStudent);
+      setActionSuccessMsg(`✅ Student ${newStudent.name} added successfully with Admission #${cleanAdm}!`);
+      setTimeout(() => setActionSuccessMsg(''), 5000);
     } catch (err: any) {
       setAddStudentError(err.message || 'Failed to add student');
     } finally {
       setAddingStudent(false);
     }
+  }
+
+  async function handleConfirmRemoveStudent() {
+    if (!studentToRemove) return;
+    setRemovingStudent(true);
+    try {
+      await databaseService.deleteStudent(studentToRemove.id);
+      const updatedStudents = allStudents.filter(s => s.id !== studentToRemove.id);
+      setAllStudents(updatedStudents);
+      setStudents(prev => prev.filter(s => s.id !== studentToRemove.id));
+      setAttendance(prev => {
+        const next = { ...prev };
+        delete next[studentToRemove.id];
+        return next;
+      });
+      setActionSuccessMsg(`✓ Student ${studentToRemove.name} (Admission #${studentToRemove.admissionNumber || studentToRemove.id}) was removed.`);
+      setTimeout(() => setActionSuccessMsg(''), 4000);
+      setStudentToRemove(null);
+    } catch (err) {
+      console.error('Failed to remove student:', err);
+      setActionSuccessMsg('❌ Failed to remove student. Please try again.');
+    } finally {
+      setRemovingStudent(false);
+    }
+  }
+
+  function handleCopyAdmissionInfo(student: Student) {
+    const text = `🏛️ *${user?.schoolName || 'Government School'} - Student Registration Credentials*\n\n• Student: *${student.name}*\n• School Admission Number: *${student.admissionNumber || student.id}*\n• Class: *${student.classRoom}* (Grade ${student.grade})\n• Student ID: *${student.id}*\n\n📱 *Mobile App Registration*:\n1. Open EduNexus Mobile App\n2. Select Register as *Student* or *Parent*\n3. Enter Admission Number: *${student.admissionNumber || student.id}*\n4. Complete your account password setup.`;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedAdmission(true);
+      setTimeout(() => setCopiedAdmission(false), 3000);
+    }).catch(err => console.error('Copy failed:', err));
   }
 
   const statusClasses: Record<AttendanceStatus, string> = {
@@ -598,6 +668,34 @@ export default function AttendanceScreen() {
         </div>
       </div>
 
+      {/* Success Notification Alert */}
+      {actionSuccessMsg && (
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.12)',
+          border: '1.5px solid rgba(16, 185, 129, 0.4)',
+          color: '#10b981',
+          padding: '12px 18px',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sparkles size={16} />
+            <span>{actionSuccessMsg}</span>
+          </div>
+          <button
+            onClick={() => setActionSuccessMsg('')}
+            style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Relevant Class Information & Date Selection */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', alignItems: 'center' }}>
@@ -614,6 +712,9 @@ export default function AttendanceScreen() {
                     {currentClassObj.stream === 'ol' ? t('olStream', language) : t('alStream', language)}
                   </span>
                 )}
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  {students.length} Student{students.length !== 1 ? 's' : ''} Enrolled
+                </span>
               </div>
             </div>
           </div>
@@ -635,8 +736,15 @@ export default function AttendanceScreen() {
       {/* Student list */}
       <div className="card">
         {students.length === 0 ? (
-          <div className="empty-state">
-            <p>{t('noStudents', language)}</p>
+          <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <GraduationCap size={44} style={{ color: 'var(--text-muted)', marginBottom: '12px', opacity: 0.6 }} />
+            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px' }}>{t('noStudents', language)}</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
+              No students are currently registered in Class {selectedClass}. You can add students using their School Admission Number.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={openAddModal}>
+              <UserPlus size={14} /> {t('addStudent', language)}
+            </button>
           </div>
         ) : (
           <div className="table-wrapper" style={{ border: 'none' }}>
@@ -645,14 +753,17 @@ export default function AttendanceScreen() {
                 <tr>
                   <th>#</th>
                   <th>{t('student', language)}</th>
+                  <th>{t('admissionNumber', language)}</th>
                   <th>{t('contact', language)}</th>
+                  <th>Mobile Portal</th>
                   <th>{t('attendance', language)}</th>
+                  <th style={{ textAlign: 'center' }}>{t('actions', language)}</th>
                 </tr>
               </thead>
               <tbody>
                 {students.map((s, i) => (
                   <tr key={s.id}>
-                    <td style={{ color: 'var(--text-muted)', width: '40px' }}>{i + 1}</td>
+                    <td style={{ color: 'var(--text-muted)', width: '36px' }}>{i + 1}</td>
                     <td>
                       <button
                         type="button"
@@ -670,10 +781,68 @@ export default function AttendanceScreen() {
                         <div style={{ fontWeight: 600, color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
                           {s.name}
                         </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{s.id}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {s.id}</div>
                       </button>
                     </td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{s.parentContact}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span
+                          className="badge badge-primary"
+                          style={{
+                            fontFamily: 'monospace',
+                            fontWeight: 700,
+                            letterSpacing: '0.5px',
+                            background: 'rgba(2, 132, 199, 0.12)',
+                            color: '#0284c7',
+                            border: '1px solid rgba(2, 132, 199, 0.3)',
+                            padding: '3px 8px',
+                          }}
+                        >
+                          {s.admissionNumber || s.id}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '2px 5px', height: 'auto', minWidth: 'unset', color: 'var(--text-muted)' }}
+                          onClick={() => handleCopyAdmissionInfo(s)}
+                          title="Copy Admission & Registration Info"
+                        >
+                          <Copy size={12} />
+                        </button>
+                      </div>
+                    </td>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <PhoneCall size={12} style={{ color: 'var(--text-muted)' }} />
+                        {s.parentContact || '—'}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: s.isStudentRegistered ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.12)',
+                          color: s.isStudentRegistered ? '#10b981' : '#64748b',
+                          fontWeight: 600,
+                          width: 'fit-content'
+                        }}>
+                          Student: {s.isStudentRegistered ? '✓ Registered' : '⏳ Pending'}
+                        </span>
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: s.isParentRegistered ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.12)',
+                          color: s.isParentRegistered ? '#10b981' : '#64748b',
+                          fontWeight: 600,
+                          width: 'fit-content'
+                        }}>
+                          Parent: {s.isParentRegistered ? '✓ Registered' : '⏳ Pending'}
+                        </span>
+                      </div>
+                    </td>
                     <td>
                       <div className="attendance-btn-group">
                         {STATUS_OPTIONS.map(st => (
@@ -687,6 +856,34 @@ export default function AttendanceScreen() {
                         ))}
                       </div>
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '4px 7px', minWidth: 'unset' }}
+                          onClick={() => setSelectedProfileStudentId(s.id)}
+                          title="View Profile"
+                        >
+                          <Eye size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{
+                            padding: '4px 7px',
+                            minWidth: 'unset',
+                            color: '#ef4444',
+                            background: 'rgba(239, 68, 68, 0.08)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                          }}
+                          onClick={() => setStudentToRemove(s)}
+                          title="Remove Student from Class"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -695,11 +892,199 @@ export default function AttendanceScreen() {
         )}
       </div>
 
+      {/* Recently Added Student Modal / Card */}
+      {recentlyAddedStudent && (
+        <div className="modal-overlay" onClick={() => setRecentlyAddedStudent(null)}>
+          <div className="modal" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '10px', borderRadius: '50%' }}>
+                <Check size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Student Added Successfully!</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  School Admission Number & Mobile Registration Credentials
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'var(--bg-secondary)',
+              border: '1.5px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '16px',
+              marginBottom: '18px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', fontWeight: 700 }}>
+                  School Admission Number
+                </span>
+                <span className="badge badge-success">Active in Class {recentlyAddedStudent.classRoom}</span>
+              </div>
+
+              <div style={{
+                fontSize: '24px',
+                fontWeight: 900,
+                fontFamily: 'monospace',
+                color: 'var(--primary)',
+                letterSpacing: '1px',
+                marginBottom: '10px',
+                background: 'var(--bg-card)',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                textAlign: 'center'
+              }}>
+                {recentlyAddedStudent.admissionNumber || recentlyAddedStudent.id}
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <div>👤 <strong>Student Name:</strong> {recentlyAddedStudent.name}</div>
+                <div>🏷️ <strong>Student ID:</strong> <code style={{ fontFamily: 'monospace' }}>{recentlyAddedStudent.id}</code></div>
+                <div>🏛️ <strong>Class:</strong> {recentlyAddedStudent.classRoom} (Grade {recentlyAddedStudent.grade})</div>
+                <div>📱 <strong>Parent Mobile:</strong> {recentlyAddedStudent.parentContact}</div>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(2, 132, 199, 0.08)',
+              border: '1px solid rgba(2, 132, 199, 0.25)',
+              padding: '12px 14px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              color: 'var(--text-secondary)',
+              marginBottom: '20px',
+              lineHeight: 1.4
+            }}>
+              💡 <strong>Next Step:</strong> Share this <strong>Admission Number</strong> ({recentlyAddedStudent.admissionNumber || recentlyAddedStudent.id}) with the student and parents. They can register directly on the EduNexus mobile & web app!
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setRecentlyAddedStudent(null)}
+                style={{ flex: 1 }}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => handleCopyAdmissionInfo(recentlyAddedStudent)}
+                style={{ flex: 1.4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              >
+                {copiedAdmission ? <Check size={15} /> : <Copy size={15} />}
+                {copiedAdmission ? '✓ Copied Details!' : t('copyAdmissionDetails', language)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Student Confirmation Modal */}
+      {studentToRemove && (
+        <div className="modal-overlay" onClick={() => !removingStudent && setStudentToRemove(null)}>
+          <div className="modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '12px', borderRadius: '50%' }}>
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {t('confirmRemoveStudent', language)}
+                </h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Confirm deletion from class attendance roster
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px',
+              marginBottom: '16px',
+              fontSize: '13px'
+            }}>
+              <div style={{ marginBottom: '6px' }}>
+                <strong>Student:</strong> {studentToRemove.name}
+              </div>
+              <div style={{ marginBottom: '6px' }}>
+                <strong>Admission #:</strong> <code style={{ fontFamily: 'monospace', fontWeight: 700 }}>{studentToRemove.admissionNumber || studentToRemove.id}</code>
+              </div>
+              <div style={{ marginBottom: '6px' }}>
+                <strong>Class:</strong> {studentToRemove.classRoom} (Grade {studentToRemove.grade})
+              </div>
+              <div>
+                <strong>Parent Contact:</strong> {studentToRemove.parentContact || 'None'}
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              color: '#ef4444',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              marginBottom: '20px',
+              lineHeight: 1.4
+            }}>
+              ⚠️ {t('removeStudentWarning', language)} Associated attendance records for this student will also be removed.
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setStudentToRemove(null)}
+                disabled={removingStudent}
+                style={{ flex: 1 }}
+              >
+                {t('cancel', language)}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  background: '#ef4444',
+                  color: '#ffffff',
+                  border: 'none',
+                  flex: 1.2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  fontWeight: 600
+                }}
+                onClick={handleConfirmRemoveStudent}
+                disabled={removingStudent}
+              >
+                {removingStudent ? <span className="spinner" /> : <Trash2 size={15} />}
+                {removingStudent ? 'Removing...' : 'Yes, Remove Student'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Student Modal */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2 className="modal-title">{t('addStudent', language)}</h2>
+          <div className="modal" style={{ maxWidth: '540px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', padding: '10px', borderRadius: '50%' }}>
+                <UserPlus size={22} />
+              </div>
+              <div>
+                <h2 className="modal-title" style={{ margin: 0, fontSize: '18px' }}>{t('addStudent', language)}</h2>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Assign School Admission Number & Register to Class {selectedClass || 'Assigned Class'}
+                </p>
+              </div>
+            </div>
 
             {addStudentError && (
               <div className="badge badge-danger" style={{ display: 'block', padding: '10px', marginBottom: '16px', textTransform: 'none', letterSpacing: 'normal', borderRadius: 'var(--radius-sm)' }}>
@@ -708,33 +1093,37 @@ export default function AttendanceScreen() {
             )}
 
             <form onSubmit={handleAddStudent}>
-              <div className="form-group">
+              {/* School Admission Number with Random Generator */}
+              <div className="form-group" style={{ background: 'rgba(2, 132, 199, 0.05)', border: '1px solid rgba(2, 132, 199, 0.25)', padding: '14px', borderRadius: '10px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label className="form-label" style={{ margin: 0 }}>{t('studentId', language)}</label>
+                  <label className="form-label" style={{ margin: 0, fontWeight: 700, color: '#0284c7' }}>
+                    {t('admissionNumber', language)} (Mobile App Registration Key)
+                  </label>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
-                    style={{ padding: '2px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={handleRegenerateId}
-                    title="Auto-generate a meaningful collision-free Student ID"
+                    style={{ padding: '3px 9px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.3)' }}
+                    onClick={handleRegenerateAdmission}
+                    title="Generate a new random collision-free Admission Number"
                   >
-                    <RefreshCw size={11} /> Auto-Generate
+                    <RefreshCw size={11} /> 🎲 {t('regenerateAdmissionNumber', language)}
                   </button>
                 </div>
                 <input
-                  id="new-student-id"
+                  id="new-student-admission"
                   className="form-control"
-                  value={newStudentId}
-                  onChange={e => setNewStudentId(e.target.value)}
-                  placeholder="e.g. STU-2026-10A-001"
+                  value={newAdmissionNumber}
+                  onChange={e => setNewAdmissionNumber(e.target.value.toUpperCase())}
+                  placeholder="e.g. ADM-84920"
                   required
-                  style={{ fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.5px' }}
+                  style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '1px', fontSize: '15px' }}
                 />
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                  Standard Format: STU-[Year]-[Class]-[Sequential #]
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', display: 'block' }}>
+                  💡 Unique school admission number assigned randomly. Students & Parents will use this to register their mobile app account.
                 </span>
               </div>
 
+              {/* Student Name */}
               <div className="form-group">
                 <label className="form-label">{t('studentName', language)}</label>
                 <input
@@ -742,11 +1131,12 @@ export default function AttendanceScreen() {
                   className="form-control"
                   value={newStudentName}
                   onChange={e => setNewStudentName(e.target.value)}
-                  placeholder="e.g. John Doe"
+                  placeholder="e.g. Kasun Chamara Perera"
                   required
                 />
               </div>
 
+              {/* Assigned Class */}
               <div className="form-group">
                 <label className="form-label">{t('assignedClass', language)}</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
@@ -762,8 +1152,34 @@ export default function AttendanceScreen() {
                 </div>
               </div>
 
+              {/* Student ID */}
               <div className="form-group">
-                <label className="form-label">{t('parentContact', language)}</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ margin: 0 }}>{t('studentId', language)}</label>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '2px 6px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    onClick={handleRegenerateId}
+                    title="Auto-generate Student ID"
+                  >
+                    <RefreshCw size={11} /> Auto-Generate ID
+                  </button>
+                </div>
+                <input
+                  id="new-student-id"
+                  className="form-control"
+                  value={newStudentId}
+                  onChange={e => setNewStudentId(e.target.value.toUpperCase())}
+                  placeholder="e.g. STU-2026-10A-001"
+                  required
+                  style={{ fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.5px' }}
+                />
+              </div>
+
+              {/* Parent Contact Number */}
+              <div className="form-group">
+                <label className="form-label">{t('parentContact', language)} (Mobile / WhatsApp)</label>
                 <input
                   id="new-parent-contact"
                   className="form-control"
@@ -771,6 +1187,19 @@ export default function AttendanceScreen() {
                   onChange={e => setNewParentContact(e.target.value)}
                   placeholder="e.g. +94771234567"
                   required
+                />
+              </div>
+
+              {/* Parent Email (Optional) */}
+              <div className="form-group">
+                <label className="form-label">{t('parentEmail', language)}</label>
+                <input
+                  id="new-parent-email"
+                  type="email"
+                  className="form-control"
+                  value={newParentEmail}
+                  onChange={e => setNewParentEmail(e.target.value)}
+                  placeholder="e.g. parent@gmail.com"
                 />
               </div>
 

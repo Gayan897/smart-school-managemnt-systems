@@ -300,7 +300,78 @@ export const databaseService = {
   },
 
   async createStudent(student: Student): Promise<void> {
-    await setDoc(doc(studentsCol, student.id), cleanData(student));
+    const existing = await this.getStudents();
+    const adm = student.admissionNumber?.trim() || this.generateRandomAdmissionNumber(existing);
+    const dataToSave: Student = {
+      ...student,
+      admissionNumber: adm.toUpperCase(),
+      registeredAt: student.registeredAt || new Date().toISOString(),
+    };
+    await setDoc(doc(studentsCol, student.id), cleanData(dataToSave));
+  },
+
+  async deleteStudent(studentId: string): Promise<void> {
+    // 1. Delete student doc
+    await deleteDoc(doc(studentsCol, studentId));
+
+    // 2. Cleanup associated attendance records in Firestore
+    try {
+      const q = query(attendanceCol, where('studentId', '==', studentId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => {
+          batch.delete(d.ref);
+        });
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn('Failed to cleanup student attendance records on delete:', e);
+    }
+  },
+
+  generateRandomAdmissionNumber(existingStudents: Student[] = []): string {
+    const allAdmissions = new Set(
+      existingStudents.map(s => (s.admissionNumber || s.id || '').toUpperCase())
+    );
+    let candidate = '';
+    let attempts = 0;
+    do {
+      // 5-digit random admission number format: e.g. ADM-84920
+      const randomNum = Math.floor(10000 + Math.random() * 90000);
+      candidate = `ADM-${randomNum}`;
+      attempts++;
+    } while (allAdmissions.has(candidate.toUpperCase()) && attempts < 100);
+
+    return candidate;
+  },
+
+  async getStudentByAdmissionNumber(admissionNumber: string, schoolCensusCode?: string): Promise<Student | null> {
+    const clean = (admissionNumber || '').trim().toUpperCase();
+    if (!clean) return null;
+
+    const allStudents = await this.getStudents();
+    const matched = allStudents.find(s => {
+      const sAdm = (s.admissionNumber || '').toUpperCase();
+      const sId = (s.id || '').toUpperCase();
+      const matchesAdm = sAdm === clean || sId === clean || sAdm.replace(/[^0-9]/g, '') === clean.replace(/[^0-9]/g, '');
+      if (!matchesAdm) return false;
+      if (schoolCensusCode && s.schoolCensusCode && s.schoolCensusCode !== schoolCensusCode) {
+        return false;
+      }
+      return true;
+    });
+
+    return matched || null;
+  },
+
+  async updateStudentRegistrationStatus(studentId: string, role: 'student' | 'parent', registered = true): Promise<void> {
+    try {
+      const updateData = role === 'student' ? { isStudentRegistered: registered } : { isParentRegistered: registered };
+      await setDoc(doc(studentsCol, studentId), cleanData(updateData), { merge: true });
+    } catch (e) {
+      console.warn('Failed to update student registration status:', e);
+    }
   },
 
   generateStudentId(classRoom: string, existingStudents: Student[] = []): string {

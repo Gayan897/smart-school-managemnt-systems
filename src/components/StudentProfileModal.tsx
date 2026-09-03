@@ -179,7 +179,20 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
                   letterSpacing: '0.5px',
                   fontFamily: 'monospace',
                 }}>
-                  {student.id}
+                  ID: {student.id}
+                </span>
+                <span style={{
+                  background: 'rgba(56, 189, 248, 0.3)',
+                  border: '1px solid rgba(56, 189, 248, 0.6)',
+                  padding: '3px 10px',
+                  borderRadius: '16px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  letterSpacing: '0.5px',
+                  fontFamily: 'monospace',
+                  color: '#ffffff',
+                }}>
+                  ADM: {student.admissionNumber || student.id}
                 </span>
                 <span style={{
                   background: isHighRisk ? '#ef4444' : isModerateRisk ? '#f59e0b' : '#10b981',
@@ -328,10 +341,16 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
                 <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <ShieldCheck size={18} style={{ color: 'var(--primary)' }} /> Student Information & Credentials
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>School Admission #</span>
+                    <p style={{ margin: '4px 0 0 0', fontWeight: 800, fontFamily: 'monospace', fontSize: '15px', color: '#0284c7' }}>
+                      {student.admissionNumber || student.id}
+                    </p>
+                  </div>
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Unique Student ID</span>
-                    <p style={{ margin: '4px 0 0 0', fontWeight: 700, fontFamily: 'monospace', fontSize: '14px', color: 'var(--primary)' }}>{student.id}</p>
+                    <p style={{ margin: '4px 0 0 0', fontWeight: 700, fontFamily: 'monospace', fontSize: '13px', color: 'var(--text-primary)' }}>{student.id}</p>
                   </div>
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Full Name</span>
@@ -344,6 +363,31 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Parent / Emergency Phone</span>
                     <p style={{ margin: '4px 0 0 0', fontWeight: 600, color: 'var(--text-primary)' }}>{student.parentContact || 'Not registered'}</p>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Mobile App Registration</span>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: student.isStudentRegistered ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.12)',
+                        color: student.isStudentRegistered ? '#10b981' : '#64748b',
+                        fontWeight: 700
+                      }}>
+                        Student: {student.isStudentRegistered ? '✓ Registered' : '⏳ Pending'}
+                      </span>
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: student.isParentRegistered ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.12)',
+                        color: student.isParentRegistered ? '#10b981' : '#64748b',
+                        fontWeight: 700
+                      }}>
+                        Parent: {student.isParentRegistered ? '✓ Registered' : '⏳ Pending'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
