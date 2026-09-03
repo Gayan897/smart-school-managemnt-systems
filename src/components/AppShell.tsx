@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { to: '/reports', icon: BarChart2, key: 'reports' },
   { to: '/timetable', icon: Clock, key: 'timetable' },
   { to: '/edupub', icon: BookOpen, key: 'edupub' },
-  { to: '/university-advisor', icon: GraduationCap, key: 'universityAdvisor' },
+  { to: '/university-advisor', icon: GraduationCap, key: 'universityAdvisor', hideForTeacher: true },
   { to: '/class-management', icon: Users, key: 'classManagement', principalOnly: true },
 ];
 
@@ -63,6 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     if (item.zonalAdminOnly) return false;
     if (item.principalOnly) return user?.role === 'principal';
+    if (item.hideForTeacher && user?.role === 'teacher') return false;
     return true;
   });
 

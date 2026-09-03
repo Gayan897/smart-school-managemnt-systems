@@ -164,6 +164,7 @@ function AppRoutes() {
         path="/university-advisor"
         element={
           !user ? <Navigate to="/login" replace /> :
+          user.role === 'teacher' ? <Navigate to="/dashboard" replace /> :
           <AppShell><UniversityAdvisorScreen /></AppShell>
         }
       />
