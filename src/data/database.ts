@@ -665,6 +665,56 @@ export const databaseService = {
     return snapshot.docs.map((doc) => doc.data());
   },
 
+  async saveTermMarksBatch(marks: TermMark[]): Promise<void> {
+    if (marks.length === 0) return;
+    const batch = writeBatch(db);
+    for (const m of marks) {
+      const cleanSub = m.subject.replace(/[^a-zA-Z0-9]/g, '_');
+      const docId = `${m.studentId}_${cleanSub}_${m.term}`;
+      const docRef = doc(termMarksCol, docId);
+      batch.set(docRef, cleanData(m), { merge: true });
+    }
+    await batch.commit();
+  },
+
+  subscribeToStudents(
+    callback: (students: Student[]) => void,
+    schoolCensusCode?: string,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    return onSnapshot(
+      studentsCol,
+      (snap) => {
+        let list = snap.docs.map((d) => d.data());
+        if (schoolCensusCode) {
+          list = list.filter(s => s.schoolCensusCode === schoolCensusCode);
+        }
+        callback(list);
+      },
+      (err) => {
+        console.error('[EduNexus] subscribeToStudents error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
+  subscribeToTermMarks(
+    callback: (marks: TermMark[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    return onSnapshot(
+      termMarksCol,
+      (snap) => {
+        const marks = snap.docs.map((d) => d.data());
+        callback(marks);
+      },
+      (err) => {
+        console.error('[EduNexus] subscribeToTermMarks error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
   async getTimetable(): Promise<TimetableSlot[]> {
     const snapshot = await getDocs(timetableCol);
     return snapshot.docs.map((doc) => doc.data());
