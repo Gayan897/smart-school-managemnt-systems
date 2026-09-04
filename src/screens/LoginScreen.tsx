@@ -9,7 +9,7 @@ import '../components/AppShell.css';
 import landingBg from '../assets/landing_bg.png';
 
 export default function LoginScreen() {
-  const { login, language, setLanguage } = useAuth();
+  const { login, logout, language, setLanguage } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -71,6 +71,11 @@ export default function LoginScreen() {
     setPendingTimerSecs(null);
     try {
       const loggedInUser = await login(username.trim(), password);
+      if (loggedInUser.role === 'student' || loggedInUser.role === 'parent') {
+        logout();
+        setError('Access Restricted: This web portal is exclusively for Principals and Teachers. Students and Parents must use the mobile application.');
+        return;
+      }
       if (loggedInUser.role === 'zonal_admin') {
         navigate('/admin');
       } else {

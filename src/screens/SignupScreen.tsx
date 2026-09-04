@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
 import { verifyNicImages, validateSriLankaNic } from '../data/nicVerification';
-import type { User, UserRole, GovernmentSchool, SchoolClass, Student } from '../data/models';
+import type { User, UserRole, GovernmentSchool, SchoolClass } from '../data/models';
 import '../components/AppShell.css';
 import landingBg from '../assets/landing_bg.png';
 
@@ -57,14 +57,6 @@ export default function SignupScreen() {
   const [requestingKey, setRequestingKey] = useState(false);
   const [requestSuccessMsg, setRequestSuccessMsg] = useState('');
   const [modalError, setModalError] = useState('');
-
-  // Student & Parent Admission Number Verification State
-  const [inputAdmissionNumber, setInputAdmissionNumber] = useState('');
-  const [verifiedStudent, setVerifiedStudent] = useState<Student | null>(null);
-  const [verifyingAdmission, setVerifyingAdmission] = useState(false);
-  const [admissionVerifiedMsg, setAdmissionVerifiedMsg] = useState('');
-  const [admissionError, setAdmissionError] = useState('');
-  const [parentContactPhone, setParentContactPhone] = useState('');
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -258,38 +250,6 @@ export default function SignupScreen() {
     }
   }
 
-  async function handleVerifyAdmission() {
-    if (!inputAdmissionNumber.trim()) {
-      setAdmissionError('Please enter a School Admission Number.');
-      setVerifiedStudent(null);
-      return;
-    }
-    setVerifyingAdmission(true);
-    setAdmissionError('');
-    setAdmissionVerifiedMsg('');
-    try {
-      const found = await databaseService.getStudentByAdmissionNumber(inputAdmissionNumber.trim(), selectedSchoolCode);
-      if (!found) {
-        setVerifiedStudent(null);
-        setAdmissionError(`❌ Admission Number (${inputAdmissionNumber.trim().toUpperCase()}) not found for ${selectedSchool?.name || 'the selected school'}. Please verify the number assigned by your teacher.`);
-      } else {
-        setVerifiedStudent(found);
-        setAdmissionVerifiedMsg(`✅ Verified Student: ${found.name} (Class ${found.classRoom}, Grade ${found.grade})`);
-        if (role === 'student' && !name.trim()) {
-          setName(found.name);
-        }
-        if (role === 'parent' && !parentContactPhone.trim()) {
-          setParentContactPhone(found.parentContact || '');
-        }
-      }
-    } catch (err) {
-      console.error('Admission verification failed:', err);
-      setAdmissionError('Failed to verify admission number. Please check connection.');
-    } finally {
-      setVerifyingAdmission(false);
-    }
-  }
-
   function toggleZonalPortal(showZonal: boolean) {
     setIsZonalPortal(showZonal);
     if (showZonal) {
@@ -322,20 +282,7 @@ export default function SignupScreen() {
       const selectedSchool = schools.find(s => s.censusCode === selectedSchoolCode);
 
       // 2. Role-specific Security Checks
-      let currentVerifiedStu = verifiedStudent;
-
-      if (role === 'student' || role === 'parent') {
-        if (!inputAdmissionNumber.trim()) {
-          throw new Error('School Admission Number is required to register as Student or Parent.');
-        }
-        if (!currentVerifiedStu) {
-          currentVerifiedStu = await databaseService.getStudentByAdmissionNumber(inputAdmissionNumber.trim(), selectedSchoolCode);
-        }
-        if (!currentVerifiedStu) {
-          throw new Error(`Admission Number (${inputAdmissionNumber.trim().toUpperCase()}) not found in ${selectedSchool?.name || 'the selected school'}. Please verify with your class teacher.`);
-        }
-        setVerifiedStudent(currentVerifiedStu);
-      } else if (role === 'teacher') {
+      if (role === 'teacher') {
         if (!nicNumber.trim()) {
           throw new Error('Official NIC Number is required for Teacher verification.');
         }
@@ -421,14 +368,6 @@ export default function SignupScreen() {
         ...(email.trim() || inviteEmail ? { email: email.trim() || inviteEmail } : {}),
         ...(nicNumber.trim() ? { nicNumber: nicNumber.trim().toUpperCase() } : {}),
         ...(sleasNumber.trim() ? { sleasNumber: sleasNumber.trim() } : {}),
-        ...(role === 'student' || role === 'parent' ? {
-          admissionNumber: (currentVerifiedStu?.admissionNumber || inputAdmissionNumber).trim().toUpperCase(),
-          studentId: currentVerifiedStu?.id,
-          classRoom: currentVerifiedStu?.classRoom,
-          studentGrade: currentVerifiedStu?.grade,
-          parentContact: role === 'parent' ? (parentContactPhone.trim() || currentVerifiedStu?.parentContact) : currentVerifiedStu?.parentContact,
-          registeredAt: new Date().toISOString(),
-        } : {}),
         ...(role === 'teacher' ? {
           nicFrontImage: teacherNicFront,
           nicBackImage: teacherNicBack,
@@ -442,11 +381,7 @@ export default function SignupScreen() {
       await databaseService.createUser(newUser);
 
       // 4. Post-registration role setup
-      if (role === 'student' || role === 'parent') {
-        if (currentVerifiedStu?.id) {
-          await databaseService.updateStudentRegistrationStatus(currentVerifiedStu.id, role, true);
-        }
-      } else if (role === 'teacher') {
+      if (role === 'teacher') {
         await databaseService.createTeacherProfile(newUser);
         logout();
         setTeacherPendingState({
@@ -657,27 +592,27 @@ export default function SignupScreen() {
               </div>
             )}
 
-            {/* School Role Selection (Teacher, Principal, Student, Parent) */}
+            {/* School Role Selection (Teacher, Principal) */}
             {!isZonalPortal && (
               <div className="form-group">
                 <label className="form-label">Account Role</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
                   <button
                     type="button"
                     className={`btn ${role === 'teacher' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '11px', padding: '8px 2px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', borderRadius: '8px' }}
+                    style={{ fontSize: '13px', padding: '12px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', borderRadius: '8px' }}
                     onClick={() => { setRole('teacher'); setError(''); }}
                   >
-                    <span style={{ fontSize: '16px' }}>👩‍🏫</span>
-                    <span>Teacher</span>
+                    <span style={{ fontSize: '20px' }}>👩‍🏫</span>
+                    <span style={{ fontWeight: 600 }}>Teacher</span>
                   </button>
                   <button
                     type="button"
                     className={`btn ${role === 'principal' ? 'btn-primary' : 'btn-secondary'}`}
                     style={{
-                      fontSize: '11px',
-                      padding: '8px 2px',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+                      fontSize: '13px',
+                      padding: '12px 8px',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
                       borderRadius: '8px',
                       opacity: isPrincipalRegistered ? 0.55 : 1,
                       cursor: isPrincipalRegistered ? 'not-allowed' : 'pointer',
@@ -686,26 +621,8 @@ export default function SignupScreen() {
                     onClick={() => { if (!isPrincipalRegistered) { setRole('principal'); setError(''); } }}
                     title={isPrincipalRegistered ? `A Principal is already registered for ${selectedSchool?.name}` : undefined}
                   >
-                    <span style={{ fontSize: '16px' }}>🏫</span>
-                    <span>Principal {isPrincipalRegistered ? '🔒' : ''}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${role === 'student' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '11px', padding: '8px 2px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', borderRadius: '8px' }}
-                    onClick={() => { setRole('student'); setError(''); }}
-                  >
-                    <span style={{ fontSize: '16px' }}>🎓</span>
-                    <span>Student</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${role === 'parent' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '11px', padding: '8px 2px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', borderRadius: '8px' }}
-                    onClick={() => { setRole('parent'); setError(''); }}
-                  >
-                    <span style={{ fontSize: '16px' }}>👨‍👩‍👧</span>
-                    <span>Parent</span>
+                    <span style={{ fontSize: '20px' }}>🏫</span>
+                    <span style={{ fontWeight: 600 }}>Principal {isPrincipalRegistered ? '🔒' : ''}</span>
                   </button>
                 </div>
                 {isPrincipalRegistered && role === 'principal' && (
@@ -721,96 +638,6 @@ export default function SignupScreen() {
                     lineHeight: 1.4
                   }}>
                     🔒 <strong>Principal Registered:</strong> {selectedSchool?.principalName || 'Verified Principal'} has already registered for {selectedSchool?.name}.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Student & Parent Admission Number Verification Card */}
-            {!isZonalPortal && (role === 'student' || role === 'parent') && (
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(2,132,199,0.08) 0%, rgba(99,102,241,0.06) 100%)',
-                border: '1.5px solid rgba(2, 132, 199, 0.3)',
-                borderRadius: '12px',
-                padding: '16px',
-                marginBottom: '18px'
-              }}>
-                <div style={{ fontWeight: 700, fontSize: '13px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                  <ShieldCheck size={18} />
-                  <span>{role === 'student' ? 'Student' : 'Parent'} Admission Number Verification</span>
-                </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
-                  Enter the unique School Admission Number (e.g. <code>ADM-84920</code>) assigned by your class teacher to link your account.
-                </p>
-
-                <div className="form-group" style={{ marginBottom: '10px' }}>
-                  <label className="form-label" style={{ fontSize: '11px' }}>School Admission Number</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input
-                      id="signup-admission-number"
-                      className="form-control"
-                      placeholder="e.g. ADM-84920"
-                      value={inputAdmissionNumber}
-                      onChange={e => {
-                        setInputAdmissionNumber(e.target.value.toUpperCase());
-                        setVerifiedStudent(null);
-                        setAdmissionError('');
-                        setAdmissionVerifiedMsg('');
-                      }}
-                      onBlur={() => inputAdmissionNumber.trim() && !verifiedStudent && handleVerifyAdmission()}
-                      required
-                      style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.5px' }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={handleVerifyAdmission}
-                      disabled={verifyingAdmission || !inputAdmissionNumber.trim()}
-                      style={{ padding: '0 14px', whiteSpace: 'nowrap' }}
-                    >
-                      {verifyingAdmission ? <span className="spinner" /> : 'Verify'}
-                    </button>
-                  </div>
-                </div>
-
-                {admissionError && (
-                  <div style={{
-                    fontSize: '11px',
-                    color: '#e11d48',
-                    background: 'rgba(225, 29, 72, 0.1)',
-                    border: '1px solid rgba(225, 29, 72, 0.25)',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    marginTop: '8px',
-                    lineHeight: 1.4
-                  }}>
-                    {admissionError}
-                  </div>
-                )}
-
-                {verifiedStudent && (
-                  <div style={{
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    border: '1.5px solid rgba(16, 185, 129, 0.35)',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    marginTop: '10px',
-                    fontSize: '12px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontWeight: 700, marginBottom: '4px' }}>
-                      <CheckCircle size={15} /> Student Record Verified
-                    </div>
-                    <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                      👤 {verifiedStudent.name}
-                    </div>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '11px', marginTop: '2px' }}>
-                      🏛️ Class {verifiedStudent.classRoom} (Grade {verifiedStudent.grade}) • ID: <code style={{ fontFamily: 'monospace' }}>{verifiedStudent.id}</code>
-                    </div>
-                    {verifiedStudent.parentContact && (
-                      <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '2px' }}>
-                        📱 Registered Contact: {verifiedStudent.parentContact}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -1011,32 +838,16 @@ export default function SignupScreen() {
 
             {/* Basic Info */}
             <div className="form-group">
-              <label className="form-label">
-                {role === 'student' ? 'Student Full Name' : role === 'parent' ? 'Parent / Guardian Full Name' : t('name', language)}
-              </label>
+              <label className="form-label">{t('name', language)}</label>
               <input
                 id="signup-name"
                 className="form-control"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder={role === 'student' ? 'Student Full Name' : role === 'parent' ? 'Parent / Guardian Full Name' : 'Full Official Name'}
+                placeholder="Full Official Name"
                 required
               />
             </div>
-
-            {role === 'parent' && (
-              <div className="form-group">
-                <label className="form-label">Parent Mobile Number (For Attendance Alerts)</label>
-                <input
-                  id="signup-parent-phone"
-                  className="form-control"
-                  value={parentContactPhone}
-                  onChange={e => setParentContactPhone(e.target.value)}
-                  placeholder="e.g. +94 77 123 4567"
-                  required
-                />
-              </div>
-            )}
 
             <div className="form-group">
               <label className="form-label">Email Address {role === 'principal' && <span style={{ color: '#6b7280', fontSize: '11px' }}>(Official Contact)</span>}</label>

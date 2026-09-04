@@ -14,8 +14,6 @@ import TimetableScreen from './screens/TimetableScreen';
 import ClassManagementScreen from './screens/ClassManagementScreen';
 import EduPubScreen from './screens/EduPubScreen';
 import UniversityAdvisorScreen from './screens/UniversityAdvisorScreen';
-import ProxyEngineScreen from './screens/ProxyEngineScreen';
-import CorrelationRadarScreen from './screens/CorrelationRadarScreen';
 import ZonalAdminScreen from './screens/ZonalAdminScreen';
 import AdminLoginScreen from './screens/AdminLoginScreen';
 import ProfileScreen from './screens/ProfileScreen';

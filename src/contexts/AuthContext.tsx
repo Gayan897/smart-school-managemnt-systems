@@ -28,11 +28,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && !parsed.schoolCensusCode && parsed.role === 'zonal_admin') {
-          parsed.schoolCensusCode = 'ZONAL-MOE';
-          parsed.schoolName = 'Colombo / Homagama Zonal Education Office';
+        if (parsed && (parsed.role === 'student' || parsed.role === 'parent')) {
+          localStorage.removeItem('edunexus_user');
+          localStorage.removeItem('sams_user');
+        } else if (parsed) {
+          if (!parsed.schoolCensusCode && parsed.role === 'zonal_admin') {
+            parsed.schoolCensusCode = 'ZONAL-MOE';
+            parsed.schoolName = 'Colombo / Homagama Zonal Education Office';
+          }
+          setUser(parsed);
         }
-        setUser(parsed);
       } catch { /* ignore */ }
     }
     setIsLoading(false);
@@ -56,6 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (!found) throw new Error('User not found. Please check your username.');
     if (found.password !== password) throw new Error('Incorrect password.');
+
+    // Block student and parent roles from web app access
+    if (found.role === 'student' || found.role === 'parent') {
+      throw new Error(
+        'Access Restricted: The web portal is exclusively for Principals and Teachers. Students and Parents must access via the mobile application.'
+      );
+    }
 
     if (!found.schoolCensusCode && found.role === 'zonal_admin') {
       found.schoolCensusCode = 'ZONAL-MOE';
