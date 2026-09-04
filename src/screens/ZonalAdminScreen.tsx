@@ -172,8 +172,24 @@ export default function ZonalAdminScreen() {
   function triggerNativeSMS(school: GovernmentSchool, phone: string, inviteUrl: string) {
     const cleanPhone = phone.replace(/[^\d+]/g, '');
     const smsBody = `MOE EDUNEXUS: Official Registration Key for ${school.name} [${school.censusCode}] is ${school.zonalSecretKey}. Register at: ${inviteUrl}`;
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    window.open(`sms:${encodeURIComponent(cleanPhone)}?body=${encodeURIComponent(smsBody)}`, '_blank');
+    if (isMobile) {
+      window.location.href = `sms:${encodeURIComponent(cleanPhone)}?body=${encodeURIComponent(smsBody)}`;
+    } else {
+      // Desktop: Copy to clipboard and safely attempt Phone Link via hidden iframe (avoids Bing)
+      navigator.clipboard.writeText(`To: ${cleanPhone}\n\n${smsBody}`).then(() => {
+        setEmailStatusMsg(`📋 SMS alert copied to clipboard for Principal (${cleanPhone})!`);
+      }).catch(() => {});
+
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = `sms:${encodeURIComponent(cleanPhone)}?body=${encodeURIComponent(smsBody)}`;
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch {}
+      }, 1000);
+    }
   }
 
   async function triggerWebShare(school: GovernmentSchool, inviteUrl: string) {
@@ -286,15 +302,7 @@ export default function ZonalAdminScreen() {
           </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>
-            <Activity size={22} color="#f59e0b" />
-          </div>
-          <div className="stat-info">
-            <div className="stat-value" style={{ color: '#f59e0b' }}>94.2%</div>
-            <div className="stat-label">Zonal Attendance Avg</div>
-          </div>
-        </div>
+
       </div>
 
       {/* Pending Zonal Key Requests Alert Card */}

@@ -336,8 +336,11 @@ export function isNoticeRelevantToUser(notice: Notice, user: User | null): boole
 
   const target = notice.targetRole || 'all';
 
-  // 1. Zonal master admin sees all notices
-  if (user.role === 'zonal_admin') return true;
+  // 1. Zonal admin: exclude teacher Leave Request notices — they only need principal-related notifications
+  if (user.role === 'zonal_admin') {
+    if (notice.category === 'Leave Request') return false;
+    return true;
+  }
 
   // 2. Block zonal_admin-only notices from principals and teachers (e.g. KEY REQUEST, approval workflows)
   if (target === 'zonal_admin') return false;

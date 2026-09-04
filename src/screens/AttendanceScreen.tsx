@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Save, UserPlus, Eye, AlertTriangle, GraduationCap,
-  RefreshCw, UserCheck, MessageSquare, Send, PhoneCall, Check, ExternalLink, X,
-  Trash2, Copy, Sparkles, Smartphone, Share2, ShieldCheck
+  RefreshCw, UserCheck, Send, PhoneCall, Check, ExternalLink, X,
+  Trash2, Copy, Sparkles, Smartphone, Share2, ShieldCheck, QrCode, Laptop
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
@@ -37,6 +37,66 @@ export default function AttendanceScreen() {
     payload: ReturnType<typeof databaseService.generateParentAlertMessage>;
     sent?: boolean;
   }[] | null>(null);
+
+  // SMS sent tracking per student
+  const [smsSent, setSmsSent] = useState<Record<string, boolean>>({});
+
+  // Desktop SMS Dispatch Modal State
+  const [activeSmsModalItem, setActiveSmsModalItem] = useState<{
+    student: Student;
+    status: AttendanceStatus;
+    payload: ReturnType<typeof databaseService.generateParentAlertMessage>;
+  } | null>(null);
+  const [copiedSmsAlert, setCopiedSmsAlert] = useState(false);
+  const [copiedQuickId, setCopiedQuickId] = useState<string | null>(null);
+
+  // Safe SMS Dispatch Handler: avoids unhandled sms: protocol triggering Bing search in Windows / Edge
+  function handleSendSms(item: {
+    student: Student;
+    status: AttendanceStatus;
+    payload: ReturnType<typeof databaseService.generateParentAlertMessage>;
+  }) {
+    const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const cleanPhone = (item.payload.parentPhone || '').replace(/[^\d+]/g, '');
+    const isApple = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // Mobile device: native SMS app handles sms: URI natively without Bing redirection
+      const smsUri = `sms:${cleanPhone}${isApple ? '&' : '?'}body=${encodeURIComponent(item.payload.messageText)}`;
+      window.location.href = smsUri;
+      setSmsSent(prev => ({ ...prev, [item.student.id]: true }));
+    } else {
+      // Desktop (Windows/Mac): NEVER navigate directly to sms: because Edge/Windows redirects unhandled protocols to Bing search!
+      // Instead, open our interactive Desktop SMS Dispatch Console with QR Code, Copy, and Web Messages options
+      setActiveSmsModalItem(item);
+    }
+  }
+
+  // 1-Click quick copy of alert and phone number
+  async function handleQuickCopySms(item: {
+    student: Student;
+    payload: ReturnType<typeof databaseService.generateParentAlertMessage>;
+  }) {
+    const textToCopy = `To: ${item.payload.parentPhone}\n\n${item.payload.messageText}`;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedQuickId(item.student.id);
+      setTimeout(() => setCopiedQuickId(null), 3000);
+    } catch {
+      // fallback
+    }
+  }
+
+  // Safely trigger Windows Phone Link / SMS via hidden iframe without opening Bing
+  function handleSafePhoneLink(phone: string, text: string) {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = `sms:${phone}?body=${encodeURIComponent(text)}`;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      try { document.body.removeChild(iframe); } catch {}
+    }, 1200);
+  }
 
   // Principal filters
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -81,6 +141,15 @@ export default function AttendanceScreen() {
       }
     });
 
+    // Real-time students subscription — updates immediately when students or parents register / login via mobile
+    const unsubStudents = databaseService.subscribeToStudents(
+      (liveStudents) => {
+        setAllStudents(liveStudents);
+      },
+      undefined,
+      (err) => console.error('Real-time students error:', err)
+    );
+
     // Real-time attendance subscription — fires immediately and on every teacher update
     const unsub = databaseService.subscribeToAttendance(
       (records) => {
@@ -92,7 +161,10 @@ export default function AttendanceScreen() {
         setLoading(false);
       }
     );
-    return () => unsub();
+    return () => {
+      unsub();
+      unsubStudents();
+    };
   }, [isPrincipal, user]);
 
   // Current class details (teacher view)
@@ -1287,7 +1359,7 @@ export default function AttendanceScreen() {
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, background: 'var(--bg-page)' }}>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
                 The following <strong>{urgentDispatchAlerts.length}</strong> student(s) were marked <strong>Absent</strong> or <strong>Late</strong>.
-                Notifications have been pushed to their parent accounts in the mobile app. You can also dispatch instant <strong>WhatsApp</strong> or <strong>SMS</strong> messages below:
+                Notifications have been pushed to their parent accounts in the mobile app. Click <strong>Send Direct SMS</strong> to open your phone's SMS app pre-filled — tap Send to deliver the alert instantly to the parent's number:
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1332,45 +1404,59 @@ export default function AttendanceScreen() {
 
                       {/* Action Dispatch Buttons */}
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', paddingTop: '10px', borderTop: '1px solid var(--border-light)' }}>
-                        {item.payload.whatsappUrl ? (
-                          <a
-                            href={item.payload.whatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-sm"
-                            style={{
-                              background: '#25D366',
-                              color: '#ffffff',
-                              border: 'none',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontWeight: 600,
-                            }}
-                            onClick={() => {
-                              const updated = [...urgentDispatchAlerts];
-                              updated[idx].sent = true;
-                              setUrgentDispatchAlerts(updated);
-                            }}
-                          >
-                            <MessageSquare size={14} /> Send WhatsApp Alert {item.sent ? '✓ Sent' : ''}
-                          </a>
-                        ) : null}
 
-                        {item.payload.smsUrl ? (
-                          <a
-                            href={item.payload.smsUrl}
-                            className="btn btn-secondary btn-sm"
-                            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                            onClick={() => {
-                              const updated = [...urgentDispatchAlerts];
-                              updated[idx].sent = true;
-                              setUrgentDispatchAlerts(updated);
-                            }}
-                          >
-                            <Send size={13} /> Send Direct SMS
-                          </a>
-                        ) : null}
+                        {/* Direct SMS Button — Safe Mobile/Desktop Handler */}
+                        {item.payload.parentPhone ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{
+                                background: smsSent[item.student.id] ? '#10b981' : '#0ea5e9',
+                                color: '#ffffff',
+                                border: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontWeight: 600,
+                                minWidth: '150px',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => handleSendSms(item)}
+                            >
+                              {smsSent[item.student.id] ? (
+                                <><Check size={14} /> SMS Dispatched ✓</>
+                              ) : (
+                                <><Send size={14} /> Send Direct SMS</>
+                              )}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => handleQuickCopySms(item)}
+                              title="Copy SMS text and parent phone number"
+                            >
+                              {copiedQuickId === item.student.id ? (
+                                <><Check size={13} color="#10b981" /> Copied ✓</>
+                              ) : (
+                                <><Copy size={13} /> Copy SMS</>
+                              )}
+                            </button>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', alignSelf: 'center' }}>
+                            ⚠ No contact number registered
+                          </span>
+                        )}
 
                         <button
                           type="button"
@@ -1406,6 +1492,257 @@ export default function AttendanceScreen() {
                 Done / Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Direct SMS Dispatch Console Modal */}
+      {activeSmsModalItem && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1200,
+          padding: '20px',
+        }}>
+          <div style={{
+            background: 'var(--bg-card)',
+            borderRadius: 'var(--radius-lg)',
+            width: '100%',
+            maxWidth: '560px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+            border: '1px solid var(--border)',
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+              padding: '18px 22px',
+              color: '#ffffff',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Smartphone size={22} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>
+                    Direct SMS Dispatch Console
+                  </h3>
+                  <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '2px' }}>
+                    Recipient: <strong>{activeSmsModalItem.student.name}</strong>'s Parent ({activeSmsModalItem.payload.parentPhone})
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveSmsModalItem(null)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Desktop Notice */}
+              <div style={{
+                background: 'rgba(14, 165, 233, 0.08)',
+                border: '1px solid rgba(14, 165, 233, 0.25)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px',
+                fontSize: '12.5px',
+                lineHeight: 1.5,
+              }}>
+                <Laptop size={18} color="#0ea5e9" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Desktop Computer Detected:</strong> Web browsers on Windows cannot send cellular SMS directly through PC motherboard hardware. Choose one of the instant dispatch options below:
+                </div>
+              </div>
+
+              {/* Method 1: QR Code Dispatch (Scan with mobile camera) */}
+              <div style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '16px',
+                background: 'var(--bg-page)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '14px', marginBottom: '8px' }}>
+                  <QrCode size={18} color="#10b981" />
+                  <span>Method 1: Scan QR to Send from Phone (Instant)</span>
+                  <span className="badge" style={{ background: '#10b981', color: '#fff', fontSize: '10px', padding: '2px 6px' }}>Recommended</span>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+                  Point your smartphone camera at the QR code below. Tap <strong>"Send SMS"</strong> on your phone screen to send this pre-filled alert immediately to the parent!
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <div style={{
+                    background: '#ffffff',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    display: 'inline-flex',
+                  }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(`SMSTO:${activeSmsModalItem.payload.parentPhone}:${activeSmsModalItem.payload.messageText}`)}`}
+                      alt="SMS Dispatch QR Code"
+                      width="130"
+                      height="130"
+                      style={{ display: 'block' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1, minWidth: '180px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    <div style={{ marginBottom: '6px' }}><strong>Parent Phone:</strong> {activeSmsModalItem.payload.parentPhone}</div>
+                    <div style={{ marginBottom: '6px' }}><strong>Attendance:</strong> {activeSmsModalItem.status.toUpperCase()}</div>
+                    <div style={{ color: '#10b981', fontWeight: 600 }}>✓ Works on any iPhone & Android camera</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Method 2: Copy Text & Phone Number */}
+              <div style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '16px',
+                background: 'var(--bg-page)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '14px' }}>
+                    <Copy size={16} color="#0ea5e9" />
+                    <span>Method 2: Copy SMS Alert</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{
+                      background: copiedSmsAlert ? '#10b981' : 'var(--primary)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontSize: '12px',
+                      padding: '4px 10px',
+                      cursor: 'pointer',
+                    }}
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(`To: ${activeSmsModalItem.payload.parentPhone}\n\n${activeSmsModalItem.payload.messageText}`);
+                        setCopiedSmsAlert(true);
+                        setTimeout(() => setCopiedSmsAlert(false), 3000);
+                      } catch {}
+                    }}
+                  >
+                    {copiedSmsAlert ? <><Check size={13} /> Copied to Clipboard!</> : <><Copy size={13} /> Copy All</>}
+                  </button>
+                </div>
+                <div style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  padding: '10px 12px',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'monospace',
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '100px',
+                  overflowY: 'auto',
+                }}>
+                  {activeSmsModalItem.payload.messageText}
+                </div>
+              </div>
+
+              {/* Method 3: Desktop Messaging Integrations */}
+              <div style={{
+                display: 'flex',
+                gap: '10px',
+                flexWrap: 'wrap',
+              }}>
+                <a
+                  href="https://messages.google.com/web"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    flex: 1,
+                    minWidth: '200px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <ExternalLink size={13} /> Open Google Messages Web
+                </a>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    flex: 1,
+                    minWidth: '200px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleSafePhoneLink(activeSmsModalItem.payload.parentPhone, activeSmsModalItem.payload.messageText)}
+                  title="Safely launches Windows Phone Link without opening Bing"
+                >
+                  <Laptop size={13} /> Open Windows Phone Link
+                </button>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 20px',
+              background: 'var(--bg-card)',
+              borderTop: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setActiveSmsModalItem(null)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                style={{ background: '#10b981', borderColor: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                onClick={() => {
+                  setSmsSent(prev => ({ ...prev, [activeSmsModalItem.student.id]: true }));
+                  setActiveSmsModalItem(null);
+                }}
+              >
+                <Check size={14} /> Mark as SMS Dispatched ✓
+              </button>
+            </div>
+
           </div>
         </div>
       )}

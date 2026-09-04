@@ -16,7 +16,8 @@ import type {
   CollectionReference,
   Unsubscribe,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from './firebase';
 import { defaultClasses, COLOMBO_GOVT_SCHOOLS } from './models';
 import type {
   User,
@@ -288,9 +289,69 @@ export const databaseService = {
     return teachers;
   },
 
+  resolveStudentRegistrationStatus(students: Student[], users: DocumentData[]): Student[] {
+    const studentUsers = users.filter(u => u.role === 'student');
+    const parentUsers = users.filter(u => u.role === 'parent');
+
+    return students.map(s => {
+      const sId = (s.id || '').trim().toUpperCase();
+      const sAdm = (s.admissionNumber || '').trim().toUpperCase();
+      const sName = (s.name || '').trim().toLowerCase();
+      const sPhoneDigits = (s.parentContact || '').replace(/[^0-9]/g, '');
+
+      const hasStudentUser = studentUsers.some(u => {
+        const uId = (u.id || '').trim().toUpperCase();
+        const uUsername = (u.username || '').trim().toLowerCase();
+        const uAdm = (u.admissionNumber || u.studentId || '').trim().toUpperCase();
+        const uName = (u.name || '').trim().toLowerCase();
+
+        return (
+          uId === sId ||
+          (sAdm && (uAdm === sAdm || uUsername === sAdm.toLowerCase())) ||
+          uUsername === sId.toLowerCase() ||
+          (sName && (uName === sName || uUsername === sName))
+        );
+      });
+
+      const hasParentUser = parentUsers.some(u => {
+        const uLinkedId = (u.studentId || u.admissionNumber || u.studentAdmission || '').trim().toUpperCase();
+        const uPhoneDigits = (u.parentContact || u.phone || u.mobile || '').replace(/[^0-9]/g, '');
+
+        const matchesId = uLinkedId && (uLinkedId === sId || (sAdm && uLinkedId === sAdm));
+        const matchesPhone = sPhoneDigits && sPhoneDigits.length >= 7 && uPhoneDigits && uPhoneDigits.length >= 7 &&
+          (sPhoneDigits.endsWith(uPhoneDigits.slice(-7)) || uPhoneDigits.endsWith(sPhoneDigits.slice(-7)));
+
+        return matchesId || matchesPhone;
+      });
+
+      return {
+        ...s,
+        isStudentRegistered: s.isStudentRegistered === true || hasStudentUser,
+        isParentRegistered: s.isParentRegistered === true || hasParentUser,
+      };
+    });
+  },
+
   async getStudents(schoolCensusCode?: string): Promise<Student[]> {
-    const snapshot = await getDocs(studentsCol);
-    const students = snapshot.docs.map((doc) => doc.data());
+    const [snapshot, usersSnapshot] = await Promise.all([
+      getDocs(studentsCol),
+      getDocs(usersCol),
+    ]);
+    const rawStudents = snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.data().id || docSnap.id }));
+    const rawUsers = usersSnapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+
+    const students = this.resolveStudentRegistrationStatus(rawStudents, rawUsers);
+
+    // Auto-heal Firestore if missing flags
+    for (const s of students) {
+      const orig = rawStudents.find(r => r.id === s.id);
+      if (orig && ((s.isStudentRegistered && !orig.isStudentRegistered) || (s.isParentRegistered && !orig.isParentRegistered))) {
+        setDoc(doc(studentsCol, s.id), cleanData({
+          isStudentRegistered: s.isStudentRegistered,
+          isParentRegistered: s.isParentRegistered,
+        }), { merge: true }).catch(() => {});
+      }
+    }
 
     if (schoolCensusCode) {
       return students.filter(s => s.schoolCensusCode === schoolCensusCode);
@@ -684,12 +745,23 @@ export const databaseService = {
   ): Unsubscribe {
     return onSnapshot(
       studentsCol,
-      (snap) => {
-        let list = snap.docs.map((d) => d.data());
-        if (schoolCensusCode) {
-          list = list.filter(s => s.schoolCensusCode === schoolCensusCode);
+      async (snap) => {
+        const rawStudents = snap.docs.map((d) => ({ ...d.data(), id: d.data().id || d.id }));
+        try {
+          const usersSnap = await getDocs(usersCol);
+          const rawUsers = usersSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+          let list = this.resolveStudentRegistrationStatus(rawStudents, rawUsers);
+          if (schoolCensusCode) {
+            list = list.filter(s => s.schoolCensusCode === schoolCensusCode);
+          }
+          callback(list);
+        } catch {
+          let list = rawStudents;
+          if (schoolCensusCode) {
+            list = list.filter(s => s.schoolCensusCode === schoolCensusCode);
+          }
+          callback(list);
         }
-        callback(list);
       },
       (err) => {
         console.error('[EduNexus] subscribeToStudents error:', err);
@@ -1280,5 +1352,24 @@ export const databaseService = {
       const existing: ZonalKeyRequest[] = JSON.parse(localStorage.getItem('edunexus_key_requests') || localStorage.getItem('sams_key_requests') || '[]');
       localStorage.setItem('edunexus_key_requests', JSON.stringify(existing.filter(r => r.id !== id)));
     } catch { /* ignore */ }
+  },
+
+  /**
+   * Sends a real SMS via the Firebase Cloud Function `sendSms`,
+   * which calls the Twilio REST API server-side.
+   * Returns { success: boolean; sid?: string; error?: string }
+   */
+  async sendParentSms(toPhone: string, messageText: string): Promise<{ success: boolean; sid?: string; error?: string }> {
+    try {
+      const sendSms = httpsCallable<
+        { to: string; body: string },
+        { success: boolean; sid: string }
+      >(functions, 'sendSms');
+      const result = await sendSms({ to: toPhone, body: messageText });
+      return { success: true, sid: result.data.sid };
+    } catch (err: any) {
+      console.error('[EduNexus] sendParentSms error:', err);
+      return { success: false, error: err?.message || 'SMS delivery failed.' };
+    }
   },
 };
