@@ -207,10 +207,16 @@
 
 /* Auth pages */
 .auth-page {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  position: fixed;
+  inset: 0;
   display: flex;
   align-items: stretch;
   background: var(--bg-dark);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .auth-left {
@@ -223,6 +229,7 @@
   padding: 40px;
   position: relative;
   overflow: hidden;
+  height: 100%;
 }
 
 .auth-left-bg {
@@ -246,19 +253,19 @@
 }
 
 .auth-logo {
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
   background: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 24px;
+  margin: 0 auto 20px;
   box-shadow: 0 10px 25px rgba(2, 132, 199, 0.3);
 }
 
 .auth-app-name {
-  font-size: 48px;
+  font-size: 44px;
   font-weight: 800;
   letter-spacing: -1px;
   margin-bottom: 8px;
@@ -269,14 +276,14 @@
 }
 
 .auth-tagline {
-  font-size: 16px;
-  color: rgba(255,255,255,0.6);
-  max-width: 300px;
+  font-size: 15px;
+  color: rgba(255,255,255,0.65);
+  max-width: 320px;
   line-height: 1.5;
 }
 
 .auth-features {
-  margin-top: 40px;
+  margin-top: 32px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -287,8 +294,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: rgba(255,255,255,0.7);
-  font-size: 14px;
+  color: rgba(255,255,255,0.75);
+  font-size: 13.5px;
 }
 
 .auth-feature-dot {
@@ -300,30 +307,51 @@
 }
 
 .auth-right {
-  width: 440px;
+  width: 480px;
+  max-width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: 24px 36px;
   background: var(--bg-card);
   border-left: 1px solid var(--border);
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.auth-right::-webkit-scrollbar {
+  width: 5px;
+}
+.auth-right::-webkit-scrollbar-track {
+  background: transparent;
+}
+.auth-right::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.auth-right::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .auth-form-container {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
+  margin: auto 0;
+  padding: 8px 0;
 }
 
 .auth-form-title {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .auth-form-sub {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary);
-  margin-bottom: 28px;
+  margin-bottom: 18px;
 }
 
 .auth-error {
@@ -333,12 +361,12 @@
   padding: 10px 14px;
   color: var(--danger);
   font-size: 13px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .auth-link-row {
   text-align: center;
-  margin-top: 20px;
+  margin-top: 14px;
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -354,24 +382,42 @@
   display: flex;
   gap: 6px;
   justify-content: center;
-  margin-top: 20px;
+  margin-top: 14px;
 }
 .auth-lang-btn {
-  padding: 4px 10px;
+  padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11.5px;
   cursor: pointer;
   transition: all 0.15s;
 }
 .auth-lang-btn.active { border-color: var(--primary); color: var(--primary-light); background: rgba(37,99,235,0.1); }
 
 @media (max-width: 768px) {
-  .auth-page { flex-direction: column; }
-  .auth-left { padding: 40px 20px; flex: none; min-height: 220px; }
-  .auth-right { width: 100%; border-left: none; border-top: 1px solid var(--border); padding: 24px 20px; }
-  .auth-app-name { font-size: 36px; }
+  .auth-page {
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+    flex-direction: column;
+  }
+  .auth-left {
+    padding: 30px 20px;
+    flex: none;
+    min-height: 180px;
+    height: auto;
+  }
+  .auth-right {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding: 24px 20px;
+    height: auto;
+    overflow-y: visible;
+  }
+  .auth-app-name { font-size: 32px; }
   .auth-features { display: none; }
 }
