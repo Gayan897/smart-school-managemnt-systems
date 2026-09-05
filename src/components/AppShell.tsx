@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const items = NAV_ITEMS.filter(item => {
     if (user?.role === 'zonal_admin') {
-      return item.zonalAdminOnly || item.key === 'notifications' || item.key === 'reports';
+      return item.zonalAdminOnly || item.key === 'notifications' || item.key === 'reports' || item.key === 'leave';
     }
     if (item.zonalAdminOnly) return false;
     if (item.principalOnly) return user?.role === 'principal';

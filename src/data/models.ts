@@ -19,8 +19,9 @@ export function calculateLeaveDays(startDate: string, endDate: string, type?: Le
 
 export interface LeaveRequest {
   id: string;
-  teacherId: string;
-  teacherName: string;
+  teacherId: string; // ID of applicant (teacher or principal)
+  teacherName: string; // Name of applicant (teacher or principal)
+  applicantRole?: UserRole; // 'principal' | 'teacher'
   type: LeaveType;
   isHalfDay?: boolean;
   halfDaySession?: 'morning' | 'afternoon';
@@ -29,6 +30,8 @@ export interface LeaveRequest {
   reason: string;
   status: LeaveStatus;
   principalComment?: string | null;
+  adminComment?: string | null; // Remarks from Zonal Admin upon review
+  reviewedByRole?: 'principal' | 'zonal_admin';
   lessonPlanNotes?: string | null; // Study material or lesson instructions left for substitute teacher
   submittedAt: string; // ISO String
   schoolCensusCode?: string;
@@ -153,6 +156,9 @@ export interface User {
   verificationUnlockAt?: number; // timestamp in ms when login becomes enabled
   registeredAt?: string; // ISO string
   classRoom?: string; // Homeroom class assigned at registration (e.g. "10A")
+  casualBalance?: number;
+  medicalBalance?: number;
+  annualBalance?: number;
 }
 
 export interface Student {
@@ -189,20 +195,6 @@ export interface SchoolClass {
   stream: ClassStream;
   homeroomTeacherId?: string | null;
   homeroomTeacherName?: string | null;
-}
-
-export interface LeaveRequest {
-  id: string;
-  teacherId: string;
-  teacherName: string;
-  type: LeaveType;
-  startDate: string; // ISO String (yyyy-MM-dd)
-  endDate: string;   // ISO String (yyyy-MM-dd)
-  reason: string;
-  status: LeaveStatus;
-  principalComment?: string | null;
-  lessonPlanNotes?: string | null; // Study material or lesson instructions left for substitute teacher
-  submittedAt: string; // ISO String
 }
 
 export type ProxyStatus = 'assigned' | 'acknowledged' | 'completed' | 'declined';

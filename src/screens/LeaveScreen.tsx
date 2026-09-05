@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Check, X, Sparkles, BookOpen, Clock, Calendar, CheckCircle } from 'lucide-react';
+import { Plus, Check, X, Sparkles, BookOpen, Clock, Calendar, CheckCircle, Building2, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
@@ -29,7 +29,11 @@ export default function LeaveScreen() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const userSchoolCode = user?.role === 'zonal_admin' ? undefined : user?.schoolCensusCode;
+  const isZonalAdmin = user?.role === 'zonal_admin';
+  const isPrincipal = user?.role === 'principal';
+  const isTeacher = user?.role === 'teacher';
+
+  const userSchoolCode = isZonalAdmin ? undefined : user?.schoolCensusCode;
 
   async function load() {
     const reqs = await databaseService.getLeaveRequests(userSchoolCode);
@@ -50,6 +54,7 @@ export default function LeaveScreen() {
       id: crypto.randomUUID(),
       teacherId: user?.id ?? '',
       teacherName: user?.name ?? '',
+      applicantRole: user?.role || 'teacher',
       type: form.type,
       isHalfDay: form.isHalfDay,
       halfDaySession: form.isHalfDay ? form.halfDaySession : undefined,
@@ -70,11 +75,14 @@ export default function LeaveScreen() {
     setSubmitting(false);
   }
 
-  async function handleDecision(req: LeaveRequest, status: LeaveStatus) {
+  async function handleDecision(req: LeaveRequest, status: LeaveStatus, decisionComment?: string) {
+    const finalComment = decisionComment !== undefined ? decisionComment : comment;
     const updated = await databaseService.updateLeaveRequest({
       ...req,
       status,
-      principalComment: comment || null,
+      principalComment: !isZonalAdmin ? (finalComment || null) : req.principalComment,
+      adminComment: isZonalAdmin ? (finalComment || null) : req.adminComment,
+      reviewedByRole: isZonalAdmin ? 'zonal_admin' : 'principal',
     });
     setCommentTarget(null);
     setComment('');
@@ -85,11 +93,17 @@ export default function LeaveScreen() {
   }
 
   const currentSchoolCode = user?.schoolCensusCode;
-
   const myRequests = leaveRequests.filter(r => r.teacherId === user?.id);
-  const displayedRequests = (user?.role === 'principal' && activeTab === 'all')
-    ? leaveRequests.filter(r => r.schoolCensusCode === currentSchoolCode)
-    : myRequests;
+
+  let displayedRequests: LeaveRequest[] = myRequests;
+  if (isPrincipal) {
+    displayedRequests = activeTab === 'all'
+      ? leaveRequests.filter(r => r.schoolCensusCode === currentSchoolCode && r.teacherId !== user?.id)
+      : myRequests;
+  } else if (isZonalAdmin) {
+    // Admin views all Principal leave requests across schools
+    displayedRequests = leaveRequests.filter(r => r.applicantRole === 'principal');
+  }
 
   const statusBadge: Record<LeaveStatus, string> = {
     pending: 'badge-warning',
@@ -109,9 +123,15 @@ export default function LeaveScreen() {
   const annualUsed = calculateUsedDays('annual');
 
   const CASUAL_MAX = 7, MEDICAL_MAX = 14, ANNUAL_MAX = 21;
-  const casualRemaining = Math.max(0, CASUAL_MAX - casualUsed);
-  const medicalRemaining = Math.max(0, MEDICAL_MAX - medicalUsed);
-  const annualRemaining = Math.max(0, ANNUAL_MAX - annualUsed);
+  const casualRemaining = user?.casualBalance !== undefined ? user.casualBalance : Math.max(0, CASUAL_MAX - casualUsed);
+  const medicalRemaining = user?.medicalBalance !== undefined ? user.medicalBalance : Math.max(0, MEDICAL_MAX - medicalUsed);
+  const annualRemaining = user?.annualBalance !== undefined ? user.annualBalance : Math.max(0, ANNUAL_MAX - annualUsed);
+
+  // Selected leave type remaining balance for modal
+  const selectedTypeBase = form.type.toString().replace(/^half_/, '');
+  const selectedTypeRemaining =
+    selectedTypeBase === 'casual' ? casualRemaining :
+    selectedTypeBase === 'medical' ? medicalRemaining : annualRemaining;
 
   if (loading) {
     return (
@@ -123,14 +143,26 @@ export default function LeaveScreen() {
 
   return (
     <div className="page">
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 className="page-title">{t('leave', language)}</h1>
+          <h1 className="page-title">
+            {isZonalAdmin ? '🏛️ Zonal Leave Administration' : t('leave', language)}
+          </h1>
+          <p className="page-subtitle">
+            {isZonalAdmin
+              ? 'Review and decide on School Principal leave applications across the zone'
+              : isPrincipal
+              ? 'Principal Leave Applications & Teacher Leave Approvals'
+              : 'Official Leave Management Portal'}
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={16} />
-          {t('applyLeave', language)}
-        </button>
+
+        {!isZonalAdmin && (
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={16} />
+            {isPrincipal ? 'Apply for Principal Leave' : t('applyLeave', language)}
+          </button>
+        )}
       </div>
 
       {/* Banner when leave is approved */}
@@ -162,35 +194,56 @@ export default function LeaveScreen() {
         </div>
       )}
 
-      {/* Remaining Leave Balance Cards */}
-      {user?.role === 'teacher' && (
-        <div className="leave-balance-grid" style={{ marginBottom: '20px' }}>
-          {[
-            { label: t('casualLeave', language), remaining: casualRemaining, used: casualUsed, max: CASUAL_MAX, color: '#0284c7' },
-            { label: t('medicalLeave', language), remaining: medicalRemaining, used: medicalUsed, max: MEDICAL_MAX, color: '#0d9488' },
-            { label: t('annualLeave', language), remaining: annualRemaining, used: annualUsed, max: ANNUAL_MAX, color: '#10b981' },
-          ].map(b => (
-            <div key={b.label} className="leave-balance-card">
-              <div className="leave-balance-value" style={{ color: b.color }}>
-                {b.remaining}
-              </div>
-              <div className="leave-balance-label">{b.label}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Used: {b.used}/{b.max} {t('days', language)} • Remaining: <strong>{b.remaining}</strong>
-              </div>
+      {/* Remaining Leave Balance Cards (Shown for Teachers & Principals) */}
+      {(isTeacher || isPrincipal) && (
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {isPrincipal ? '👔 Principal Leave Quota & Remaining Balances' : '👨‍🏫 Teacher Leave Quota & Remaining Balances'}
             </div>
-          ))}
+            {isPrincipal && (
+              <span className="badge" style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', border: '1px solid rgba(124, 58, 237, 0.3)', fontSize: '11px', fontWeight: 600 }}>
+                Approving Authority: Zonal Education Office (Admin)
+              </span>
+            )}
+          </div>
+          <div className="leave-balance-grid">
+            {[
+              { label: t('casualLeave', language), remaining: casualRemaining, used: casualUsed, max: CASUAL_MAX, color: '#0284c7' },
+              { label: t('medicalLeave', language), remaining: medicalRemaining, used: medicalUsed, max: MEDICAL_MAX, color: '#0d9488' },
+              { label: t('annualLeave', language), remaining: annualRemaining, used: annualUsed, max: ANNUAL_MAX, color: '#10b981' },
+            ].map(b => (
+              <div key={b.label} className="leave-balance-card">
+                <div className="leave-balance-value" style={{ color: b.color }}>
+                  {b.remaining}
+                </div>
+                <div className="leave-balance-label">{b.label}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Used: {b.used}/{b.max} {t('days', language)} • Remaining: <strong>{b.remaining}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Tabs for principal */}
-      {user?.role === 'principal' && (
-        <div className="tabs">
+      {isPrincipal && (
+        <div className="tabs" style={{ marginBottom: '20px' }}>
           <button className={`tab ${activeTab === 'my' ? 'active' : ''}`} onClick={() => setActiveTab('my')}>
-            {t('myLeaveBalance', language)}
+            👔 My Leave &amp; Balances ({myRequests.length})
           </button>
           <button className={`tab ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>
-            {t('pendingRequests', language)} ({leaveRequests.filter(r => r.status === 'pending').length})
+            👨‍🏫 Staff Requests for Approval ({leaveRequests.filter(r => r.schoolCensusCode === currentSchoolCode && r.teacherId !== user?.id && r.status === 'pending').length} Pending)
+          </button>
+        </div>
+      )}
+
+      {/* Tabs for Zonal Admin */}
+      {isZonalAdmin && (
+        <div className="tabs" style={{ marginBottom: '20px' }}>
+          <button className="tab active">
+            🏛️ Principal Leave Applications ({leaveRequests.filter(r => r.applicantRole === 'principal' && r.status === 'pending').length} Pending Review)
           </button>
         </div>
       )}
@@ -199,31 +252,49 @@ export default function LeaveScreen() {
       <div className="card">
         {displayedRequests.length === 0 ? (
           <div className="empty-state">
-            <p>{t('noLeaveRequests', language)}</p>
+            <p>
+              {isZonalAdmin
+                ? 'No principal leave requests submitted yet.'
+                : isPrincipal && activeTab === 'all'
+                ? 'No teacher leave requests pending approval in your school.'
+                : t('noLeaveRequests', language)}
+            </p>
           </div>
         ) : (
           <div className="table-wrapper" style={{ border: 'none' }}>
             <table className="table">
               <thead>
                 <tr>
-                  {user?.role === 'principal' && <th>Teacher</th>}
+                  {((isPrincipal && activeTab === 'all') || isZonalAdmin) && <th>Applicant</th>}
+                  {isZonalAdmin && <th>School</th>}
                   <th>{t('leaveType', language)}</th>
                   <th>Duration</th>
                   <th>{t('startDate', language)}</th>
                   <th>{t('endDate', language)}</th>
-                  <th>{t('reason', language)} & Notes</th>
-                  <th>Status & Balances</th>
-                  {user?.role === 'principal' && <th>Actions</th>}
+                  <th>{t('reason', language)} &amp; Notes</th>
+                  <th>Status &amp; Approval</th>
+                  {((isPrincipal && activeTab === 'all') || isZonalAdmin) && <th style={{ textAlign: 'center' }}>Decision Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {displayedRequests.map(req => {
                   const reqDays = calculateLeaveDays(req.startDate, req.endDate, req.type, req.isHalfDay);
+                  const isPrincipalApplicant = req.applicantRole === 'principal';
+
                   return (
                     <tr key={req.id}>
-                      {user?.role === 'principal' && (
+                      {((isPrincipal && activeTab === 'all') || isZonalAdmin) && (
                         <td>
-                          <strong>{req.teacherName}</strong>
+                          <div style={{ fontWeight: 600 }}>{req.teacherName}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {isPrincipalApplicant ? '👔 School Principal' : '👨‍🏫 Teacher'}
+                          </div>
+                        </td>
+                      )}
+                      {isZonalAdmin && (
+                        <td style={{ fontSize: '12px' }}>
+                          <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{req.schoolName || 'School'}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Census: {req.schoolCensusCode || '—'}</div>
                         </td>
                       )}
                       <td>
@@ -259,43 +330,97 @@ export default function LeaveScreen() {
                         )}
                       </td>
                       <td>
-                        <span className={`badge ${statusBadge[req.status]}`}>
-                          {t(req.status, language)}
-                        </span>
+                        {isPrincipalApplicant ? (
+                          <>
+                            <span className={`badge ${req.status === 'approved' ? 'badge-success' : req.status === 'rejected' ? 'badge-danger' : 'badge-warning'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              {req.status === 'approved' ? <CheckCircle size={12} /> : req.status === 'rejected' ? <X size={12} /> : <Clock size={12} />}
+                              {req.status === 'approved' ? 'Approved by Admin' : req.status === 'rejected' ? 'Rejected by Admin' : 'Pending Admin Approval'}
+                            </span>
+                            {req.adminComment && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                <em>Admin: "{req.adminComment}"</em>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className={`badge ${statusBadge[req.status]}`}>
+                              {t(req.status, language)}
+                            </span>
+                            {req.principalComment && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                <em>Principal: "{req.principalComment}"</em>
+                              </div>
+                            )}
+                          </>
+                        )}
                         {req.status === 'approved' && req.remainingCasualAfterApproval !== undefined && (
                           <div style={{ fontSize: '10px', color: '#10b981', marginTop: '4px', fontWeight: 600 }}>
                             Remaining: Casual {req.remainingCasualAfterApproval}d | Med {req.remainingMedicalAfterApproval}d | Ann {req.remainingAnnualAfterApproval}d
                           </div>
                         )}
                       </td>
-                      {user?.role === 'principal' && req.status === 'pending' && (
-                        <td>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button
-                              className="btn btn-success btn-sm"
-                              onClick={() => {
-                                if (commentTarget === req.id) {
-                                  handleDecision(req, 'approved');
-                                } else {
-                                  setCommentTarget(req.id);
-                                  setComment('');
-                                }
-                              }}
-                            >
-                              <Check size={13} />
-                              {t('approve', language)}
-                            </button>
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleDecision(req, 'rejected')}
-                            >
-                              <X size={13} />
-                              {t('reject', language)}
-                            </button>
-                          </div>
+
+                      {/* Decision Actions column */}
+                      {((isPrincipal && activeTab === 'all' && req.teacherId !== user?.id) || (isZonalAdmin && isPrincipalApplicant)) && (
+                        <td style={{ textAlign: 'center' }}>
+                          {req.status === 'pending' ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                              {commentTarget === req.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '200px' }}>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder={isZonalAdmin ? 'Zonal admin remark...' : 'Principal comment...'}
+                                    value={comment}
+                                    onChange={e => setComment(e.target.value)}
+                                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                                    autoFocus
+                                  />
+                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                    <button
+                                      className="btn btn-success btn-sm"
+                                      style={{ padding: '3px 8px', fontSize: '11px' }}
+                                      onClick={() => handleDecision(req, 'approved', comment)}
+                                    >
+                                      Confirm Approve
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ padding: '3px 8px', fontSize: '11px' }}
+                                      onClick={() => { setCommentTarget(null); setComment(''); }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    className="btn btn-success btn-sm"
+                                    title="Approve Leave"
+                                    onClick={() => {
+                                      setCommentTarget(req.id);
+                                      setComment('');
+                                    }}
+                                  >
+                                    <Check size={13} /> Approve
+                                  </button>
+                                  <button
+                                    className="btn btn-danger btn-sm"
+                                    title="Reject Leave"
+                                    onClick={() => handleDecision(req, 'rejected')}
+                                  >
+                                    <X size={13} /> Reject
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Completed</span>
+                          )}
                         </td>
                       )}
-                      {user?.role === 'principal' && req.status !== 'pending' && <td />}
                     </tr>
                   );
                 })}
@@ -311,8 +436,28 @@ export default function LeaveScreen() {
           <div className="modal card" style={{ maxWidth: '520px', width: '92%' }} onClick={e => e.stopPropagation()}>
             <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Calendar size={20} color="var(--primary)" />
-              {t('applyLeave', language)}
+              {isPrincipal ? 'Apply for Principal Leave' : t('applyLeave', language)}
             </h2>
+
+            {/* Principal notice about Zonal Admin approval */}
+            {isPrincipal && (
+              <div style={{
+                background: 'rgba(124, 58, 237, 0.08)',
+                border: '1px solid rgba(124, 58, 237, 0.25)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '12px',
+                color: '#7c3aed',
+                fontWeight: 500,
+              }}>
+                <ShieldCheck size={16} />
+                <span>As School Principal, your leave request will be routed directly to the <strong>Zonal Education Office (Admin)</strong> for review and approval.</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit}>
               {/* Duration Type Segmented Picker */}
@@ -355,6 +500,26 @@ export default function LeaveScreen() {
                   <option value="half_medical">Half Day - Medical (0.5 Day)</option>
                   <option value="half_annual">Half Day - Annual (0.5 Day)</option>
                 </select>
+              </div>
+
+              {/* Remaining balance badge */}
+              <div style={{
+                background: 'rgba(2, 132, 199, 0.08)',
+                border: '1px solid rgba(2, 132, 199, 0.25)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: '12px',
+              }}>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Your Available Balance for <strong>{form.type.toUpperCase()}</strong>:
+                </span>
+                <span className={`badge ${selectedTypeRemaining > 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontWeight: 700, fontSize: '12px' }}>
+                  {selectedTypeRemaining} Days Remaining
+                </span>
               </div>
 
               {/* Half Day Session Picker if Half Day is selected */}
@@ -425,16 +590,16 @@ export default function LeaveScreen() {
                   rows={2}
                   value={form.reason}
                   onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
-                  placeholder="Reason for leave application..."
+                  placeholder={isPrincipal ? "Reason for principal leave application..." : "Reason for leave application..."}
                   required
                 />
               </div>
 
-              {/* Lesson Plan Notes */}
+              {/* Handover / Study Material Notes */}
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Sparkles size={14} color="#6366f1" />
-                  {t('lessonPlanNotes', language)} (Optional)
+                  {isPrincipal ? 'Acting Principal / Handover Instructions (Optional)' : `${t('lessonPlanNotes', language)} (Optional)`}
                 </label>
                 <textarea
                   id="leave-notes"
@@ -442,7 +607,7 @@ export default function LeaveScreen() {
                   rows={2}
                   value={form.lessonPlanNotes}
                   onChange={e => setForm(f => ({ ...f, lessonPlanNotes: e.target.value }))}
-                  placeholder={t('lessonPlanNotesPlaceholder', language)}
+                  placeholder={isPrincipal ? "Instructions for Deputy Principal / Acting Principal..." : t('lessonPlanNotesPlaceholder', language)}
                 />
               </div>
 
@@ -452,7 +617,7 @@ export default function LeaveScreen() {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
                   {submitting ? <span className="spinner" /> : null}
-                  {t('submitLeave', language)}
+                  {isPrincipal ? 'Submit to Zonal Admin' : t('submitLeave', language)}
                 </button>
               </div>
             </form>
@@ -462,4 +627,3 @@ export default function LeaveScreen() {
     </div>
   );
 }
-

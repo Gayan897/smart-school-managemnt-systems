@@ -329,7 +329,7 @@ export default function PerformanceScreen() {
           </div>
         </div>
 
-        {/* Principal Filters: Grade + Term + Subject */}
+        {/* Principal Filters: Grade + Term */}
         <div className="card" style={{ marginBottom: '20px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div className="form-group" style={{ margin: 0 }}>
@@ -345,26 +345,6 @@ export default function PerformanceScreen() {
               <label className="form-label">{t('term', language)}</label>
               <select className="form-control" value={selectedTerm} onChange={e => setSelectedTerm(Number(e.target.value))}>
                 {TERMS.map(tm => <option key={tm} value={tm}>{t('term', language)} {tm}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">{t('subject', language)}</label>
-              <select className="form-control" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}>
-                <optgroup label="Core O/L Subjects (6 Compulsory)">
-                  {SRI_LANKA_SUBJECTS.filter(s => s.category === 'core').map(s => (
-                    <option key={s.id} value={s.id}>{s.nameEn}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Elective & Category Subjects">
-                  {SRI_LANKA_SUBJECTS.filter(s => s.category === 'elective').map(s => (
-                    <option key={s.id} value={s.id}>{s.nameEn}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="A/L Stream Subjects">
-                  {SRI_LANKA_SUBJECTS.filter(s => s.category === 'al').map(s => (
-                    <option key={s.id} value={s.id}>{s.nameEn}</option>
-                  ))}
-                </optgroup>
               </select>
             </div>
           </div>

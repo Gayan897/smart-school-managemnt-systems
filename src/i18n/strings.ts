@@ -92,6 +92,23 @@ const strings: Translations = {
   attendanceRate: { english: 'Attendance Rate', sinhala: 'පැමිණීම් අනුපාතය', tamil: 'வருகை விகிதம்' },
   totalRecords: { english: 'Total Records', sinhala: 'මුළු වාර්තා', tamil: 'மொத்த பதிவுகள்' },
   noLowAttendance: { english: 'No students with low attendance', sinhala: 'අඩු පැමිණීම් සිසුන් නැත', tamil: 'குறைவான வருகை மாணவர்கள் இல்லை' },
+  termWise: { english: 'Term-wise', sinhala: 'වාර අනුව', tamil: 'பருவம் வாரியாக' },
+  monthly: { english: 'Monthly', sinhala: 'මාසිකව', tamil: 'மாதாந்திர' },
+  weekly: { english: 'Weekly', sinhala: 'සතිපතා', tamil: 'வாராந்திர' },
+  daily: { english: 'Daily', sinhala: 'දිනපතා', tamil: 'தினசரி' },
+  term1: { english: 'Term 1 (Jan – Apr)', sinhala: '1 වන වාරය (ජන – අප්‍රේල්)', tamil: 'பருவம் 1 (ஜன – ஏப்)' },
+  term2: { english: 'Term 2 (May – Aug)', sinhala: '2 වන වාරය (මැයි – අගෝ)', tamil: 'பருவம் 2 (மே – ஆக)' },
+  term3: { english: 'Term 3 (Sep – Dec)', sinhala: '3 වන වාරය (සැප් – දෙසැ)', tamil: 'பருவம் 3 (செப் – டிச)' },
+  overallAttendanceRate: { english: 'Overall Attendance Rate', sinhala: 'සමස්ත පැමිණීම් ප්‍රතිශතය', tamil: 'ஒட்டுமொத்த வருகை விகிதம்' },
+  attendanceThreshold: { english: 'Attendance Threshold', sinhala: 'පැමිණීම් සීමාව', tamil: 'வருகை வரம்பு' },
+  inSelectedPeriod: { english: 'In Selected Period', sinhala: 'තෝරාගත් කාලය තුළ', tamil: 'தேர்ந்தெடுத்த காலத்தில்' },
+  allTimeYtd: { english: 'All-Time (YTD)', sinhala: 'සමස්ත කාලය', tamil: 'முழு காலம்' },
+  currentWeek: { english: 'Current Week', sinhala: 'වත්මන් සතිය', tamil: 'தற்போதைய வாரம்' },
+  prevWeek: { english: 'Prev Week', sinhala: 'පසුගිය සතිය', tamil: 'முந்தைய வாரம்' },
+  nextWeek: { english: 'Next Week', sinhala: 'ඊළඟ සතිය', tamil: 'அடுத்த வாரம்' },
+  studentRosterBreakdown: { english: 'Student Attendance Breakdown', sinhala: 'සිසු පැමිණීම් විග්‍රහය', tamil: 'மாணவர் வருகை விவரம்' },
+  criticalRisk: { english: 'Critical Risk (<50%)', sinhala: 'අතිශය අවදානම් (<50%)', tamil: 'மிக ஆபத்து (<50%)' },
+  atRisk: { english: 'At Risk (50–74%)', sinhala: 'අවදානම් (50–74%)', tamil: 'ஆபத்தில் (50–74%)' },
 
   // Leave
   applyLeave: { english: 'Apply for Leave', sinhala: 'නිවාඩු ඉල්ලීමක් කරන්න', tamil: 'விடுப்பு விண்ணப்பிக்க' },
@@ -296,6 +313,13 @@ const strings: Translations = {
   sendParentInterventionAlert: { english: 'Send Predictive WhatsApp Alert', sinhala: 'WhatsApp මගින් දෙමාපියන්ට දන්වන්න', tamil: 'பெற்றோருக்கு WhatsApp எச்சரிக்கை அனுப்பவும்' },
   highRiskStudents: { english: 'Top At-Risk Students', sinhala: 'වැඩිම අවදානම් සහිත සිසුන්', tamil: 'அதிக ஆபத்துள்ள மாணவர்கள்' },
   subjectVulnerability: { english: 'Subject Sensitivity to Absence', sinhala: 'නොපැමිණීමට විෂයයන්හි සංවේදීතාව', tamil: 'விடுப்புக்கு பாட உணர்திறன்' },
+
+  // PDF Export
+  exportPdf: { english: 'Export PDF', sinhala: 'PDF අපනයනය', tamil: 'PDF ஏற்றுமதி' },
+  downloadReport: { english: 'Download Report', sinhala: 'වාර්තාව බාගන්න', tamil: 'அறிக்கையை பதிவிறக்கு' },
+  summaryPdf: { english: 'Summary PDF', sinhala: 'සාරාංශ PDF', tamil: 'சுருக்க PDF' },
+  detailedPdf: { english: 'Detailed PDF (Full Roster)', sinhala: 'සවිස්තරාත්මක PDF (සම්පූර්ණ ලැයිස්තුව)', tamil: 'விரிவான PDF (முழு பட்டியல்)' },
+  generatingPdf: { english: 'Generating PDF...', sinhala: 'PDF සකසමින් පවතී...', tamil: 'PDF உருவாக்கப்படுகிறது...' },
 };
 
 export function t(key: string, lang: AppLanguage): string {

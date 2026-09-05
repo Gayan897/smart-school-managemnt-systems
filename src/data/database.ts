@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   deleteDoc,
@@ -506,16 +507,23 @@ export const databaseService = {
 
   async insertLeaveRequest(request: LeaveRequest): Promise<void> {
     await setDoc(doc(leaveRequestsCol, request.id), cleanData(request));
-    // Automatically generate notification for Principal of that school
+
+    const isPrincipal = request.applicantRole === 'principal';
+
+    // If Principal applied, notify Zonal Admin. If Teacher applied, notify Principal.
     const notice: Notice = {
       id: `notice_leave_${request.id}`,
-      title: `Leave Request: ${request.teacherName}`,
-      body: `${request.teacherName} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}`,
+      title: isPrincipal
+        ? `🏛️ Principal Leave Request: ${request.teacherName} (${request.schoolName || 'School'})`
+        : `Leave Request: ${request.teacherName}`,
+      body: isPrincipal
+        ? `Principal ${request.teacherName} of ${request.schoolName || 'School'} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}\n\nPlease review and approve in the Zonal Admin Command Center.`
+        : `${request.teacherName} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}`,
       date: new Date().toISOString(),
       category: 'Leave Request',
-      targetRole: 'principal',
+      targetRole: isPrincipal ? 'zonal_admin' : 'principal',
       authorName: request.teacherName,
-      authorRole: 'teacher',
+      authorRole: isPrincipal ? 'principal' : 'teacher',
       priority: 'urgent',
       schoolCensusCode: request.schoolCensusCode,
       schoolName: request.schoolName,
@@ -525,12 +533,11 @@ export const databaseService = {
 
   async updateLeaveRequest(request: LeaveRequest): Promise<LeaveRequest> {
     let updatedReq = { ...request };
+    const isPrincipal = request.applicantRole === 'principal';
 
-    // If approved, deduct leave from teacher's balances in teachersCol and record remaining balances
+    // If approved, deduct leave from applicant's balances and record remaining balances
     if (request.status === 'approved' && request.teacherId) {
       try {
-        const teacherRef = doc(teachersCol, request.teacherId);
-
         // Calculate days to deduct
         const isHalf = request.isHalfDay || request.type.toString().startsWith('half');
         let days = 1;
@@ -543,41 +550,82 @@ export const databaseService = {
           days = diff > 0 ? diff : 1;
         }
 
-        // Fetch current teacher balance
-        const allTeachers = await this.getTeachers();
-        const tObj = allTeachers.find(t => t.id === request.teacherId);
-
-        const currentCasual = tObj?.casualBalance ?? 7;
-        const currentMedical = tObj?.medicalBalance ?? 14;
-        const currentAnnual = tObj?.annualBalance ?? 21;
-
-        let newCasual = currentCasual;
-        let newMedical = currentMedical;
-        let newAnnual = currentAnnual;
-
         const baseType = request.type.toString().replace(/^half_/, '');
-        if (baseType === 'casual') {
-          newCasual = Math.max(0, currentCasual - days);
-        } else if (baseType === 'medical') {
-          newMedical = Math.max(0, currentMedical - days);
-        } else if (baseType === 'annual') {
-          newAnnual = Math.max(0, currentAnnual - days);
+
+        if (isPrincipal) {
+          // ── PRINCIPAL LEAVE DEDUCTION (Stored in users collection) ──
+          const userRef = doc(usersCol, request.teacherId);
+          const userSnap = await getDoc(userRef);
+          const uData = userSnap.exists() ? userSnap.data() as User : null;
+
+          const currentCasual = uData?.casualBalance ?? 7;
+          const currentMedical = uData?.medicalBalance ?? 14;
+          const currentAnnual = uData?.annualBalance ?? 21;
+
+          let newCasual = currentCasual;
+          let newMedical = currentMedical;
+          let newAnnual = currentAnnual;
+
+          if (baseType === 'casual') {
+            newCasual = Math.max(0, currentCasual - days);
+          } else if (baseType === 'medical') {
+            newMedical = Math.max(0, currentMedical - days);
+          } else if (baseType === 'annual') {
+            newAnnual = Math.max(0, currentAnnual - days);
+          }
+
+          updatedReq = {
+            ...updatedReq,
+            remainingCasualAfterApproval: newCasual,
+            remainingMedicalAfterApproval: newMedical,
+            remainingAnnualAfterApproval: newAnnual,
+            reviewedByRole: 'zonal_admin',
+          };
+
+          await setDoc(userRef, cleanData<Partial<User>>({
+            casualBalance: newCasual,
+            medicalBalance: newMedical,
+            annualBalance: newAnnual,
+          }), { merge: true });
+
+        } else {
+          // ── TEACHER LEAVE DEDUCTION (Stored in teachers collection) ──
+          const teacherRef = doc(teachersCol, request.teacherId);
+          const allTeachers = await this.getTeachers();
+          const tObj = allTeachers.find(t => t.id === request.teacherId);
+
+          const currentCasual = tObj?.casualBalance ?? 7;
+          const currentMedical = tObj?.medicalBalance ?? 14;
+          const currentAnnual = tObj?.annualBalance ?? 21;
+
+          let newCasual = currentCasual;
+          let newMedical = currentMedical;
+          let newAnnual = currentAnnual;
+
+          if (baseType === 'casual') {
+            newCasual = Math.max(0, currentCasual - days);
+          } else if (baseType === 'medical') {
+            newMedical = Math.max(0, currentMedical - days);
+          } else if (baseType === 'annual') {
+            newAnnual = Math.max(0, currentAnnual - days);
+          }
+
+          updatedReq = {
+            ...updatedReq,
+            remainingCasualAfterApproval: newCasual,
+            remainingMedicalAfterApproval: newMedical,
+            remainingAnnualAfterApproval: newAnnual,
+            reviewedByRole: 'principal',
+          };
+
+          await setDoc(teacherRef, cleanData<Partial<Teacher>>({
+            casualBalance: newCasual,
+            medicalBalance: newMedical,
+            annualBalance: newAnnual,
+          }), { merge: true });
         }
-
-        updatedReq = {
-          ...updatedReq,
-          remainingCasualAfterApproval: newCasual,
-          remainingMedicalAfterApproval: newMedical,
-          remainingAnnualAfterApproval: newAnnual,
-        };
-
-        await setDoc(teacherRef, cleanData<Partial<Teacher>>({
-          casualBalance: newCasual,
-          medicalBalance: newMedical,
-          annualBalance: newAnnual,
-        }), { merge: true });
       } catch (e) {
-        console.warn('Failed to update teacher leave balance on Firestore:', e);
+        console.warn('Failed to update leave balance on Firestore:', e);
       }
     }
 
@@ -587,16 +635,19 @@ export const databaseService = {
       ? `\nUpdated Remaining Balances -> Casual: ${updatedReq.remainingCasualAfterApproval} days, Medical: ${updatedReq.remainingMedicalAfterApproval} days, Annual: ${updatedReq.remainingAnnualAfterApproval} days.`
       : '';
 
-    // Automatically generate notification for Teacher
+    // Automatically generate notification for applicant
+    const approverTitle = isPrincipal ? 'Zonal Education Office / Admin' : 'Principal Office';
+    const comment = isPrincipal ? (request.adminComment || request.principalComment) : request.principalComment;
+
     const notice: Notice = {
       id: `notice_leave_decision_${request.id}_${Date.now()}`,
       title: `Leave Request ${request.status.toUpperCase()}: ${request.type.toString().replace('_', ' ').toUpperCase()} Leave`,
-      body: `Leave request for ${request.teacherName} (${request.startDate} to ${request.endDate}${request.isHalfDay ? ' [Half Day]' : ''}) has been ${request.status.toUpperCase()} by the Principal.${request.principalComment ? `\nComment: ${request.principalComment}` : ''}${remInfo}`,
+      body: `Leave request for ${request.teacherName} (${request.startDate} to ${request.endDate}${request.isHalfDay ? ' [Half Day]' : ''}) has been ${request.status.toUpperCase()} by ${approverTitle}.${comment ? `\nRemark: ${comment}` : ''}${remInfo}`,
       date: new Date().toISOString(),
       category: 'Leave Request',
-      targetRole: 'teacher',
-      authorName: 'Principal Office',
-      authorRole: 'principal',
+      targetRole: isPrincipal ? 'principal' : 'teacher',
+      authorName: approverTitle,
+      authorRole: isPrincipal ? 'zonal_admin' : 'principal',
       priority: request.status === 'approved' ? 'high' : 'urgent',
       schoolCensusCode: request.schoolCensusCode,
       schoolName: request.schoolName,
@@ -782,6 +833,26 @@ export const databaseService = {
       },
       (err) => {
         console.error('[EduNexus] subscribeToTermMarks error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
+  subscribeToLeaveRequests(
+    callback: (requests: LeaveRequest[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    return onSnapshot(
+      leaveRequestsCol,
+      (snap) => {
+        const requests = snap.docs.map((d) => ({
+          ...d.data(),
+          id: d.id,
+        })).sort((a, b) => new Date(b.submittedAt || b.startDate).getTime() - new Date(a.submittedAt || a.startDate).getTime());
+        callback(requests);
+      },
+      (err) => {
+        console.error('[EduNexus] subscribeToLeaveRequests error:', err);
         onError?.(err);
       }
     );

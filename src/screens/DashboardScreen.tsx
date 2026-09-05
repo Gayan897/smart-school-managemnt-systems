@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Sparkles, Activity, Key, Shield } from 'lucide-react';
+import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Sparkles, Activity, Key, Shield, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
@@ -84,7 +84,38 @@ export default function DashboardScreen() {
     ? teachers
     : teachers.filter(t => t.schoolCensusCode === currentSchoolCode);
 
-  const relevantNotices = notices.filter(n => isNoticeRelevantToUser(n, user ?? null)).slice(0, 5);
+  const isTeacher = user?.role === 'teacher';
+
+  const relevantNotices = notices
+    .filter(n => {
+      if (!isNoticeRelevantToUser(n, user ?? null)) return false;
+
+      // Teachers: Recent notices are valid for only 24 hours. After 24 hours, they disappear from recent notices.
+      if (isTeacher) {
+        const noticeTime = new Date(n.date).getTime();
+        if (isNaN(noticeTime)) return false;
+        const diffMs = Date.now() - noticeTime;
+        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+        // Keep notices posted within the last 24 hours (with 1-hour grace for client clock skew)
+        return diffMs >= -3600000 && diffMs <= TWENTY_FOUR_HOURS_MS;
+      }
+
+      return true;
+    })
+    .slice(0, 5);
+
+  function formatNoticeTime(dateStr: string): string {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    const diffMs = Date.now() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+  }
 
   const stats = [
     {
@@ -223,9 +254,22 @@ export default function DashboardScreen() {
         {/* Recent notices */}
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 className="card-title">
-              <Bell size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            <h2 className="card-title" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <Bell size={16} style={{ verticalAlign: 'middle' }} />
               {t('recentNotices', language)}
+              {isTeacher && (
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: 'var(--text-muted)',
+                  background: 'var(--bg-hover)',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--border)',
+                }}>
+                  Valid for 24h
+                </span>
+              )}
             </h2>
             <Link to="/notifications" className="btn btn-ghost btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
               <span>View All</span>
@@ -236,28 +280,49 @@ export default function DashboardScreen() {
             <div className="empty-state" style={{ padding: '30px 0' }}>
               <Bell size={32} style={{ marginBottom: '8px', opacity: 0.3 }} />
               <p>{t('noNotices', language)}</p>
+              {isTeacher && (
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  No notices posted in the last 24 hours. Older announcements can be viewed in{' '}
+                  <Link to="/notifications" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                    All Notifications
+                  </Link>.
+                </p>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {relevantNotices.map(n => (
-                <div key={n.id} style={{
-                  padding: '14px',
-                  background: 'var(--bg-hover)',
-                  borderRadius: 'var(--radius-sm)',
-                  borderLeft: '3px solid var(--primary)',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, marginBottom: '4px' }}>{n.title}</div>
-                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{n.body}</div>
+              {relevantNotices.map(n => {
+                const hoursAgo = Math.max(0, Math.floor((Date.now() - new Date(n.date).getTime()) / (1000 * 60 * 60)));
+                const hoursLeft = Math.max(1, 24 - hoursAgo);
+
+                return (
+                  <div key={n.id} style={{
+                    padding: '14px',
+                    background: 'var(--bg-hover)',
+                    borderRadius: 'var(--radius-sm)',
+                    borderLeft: '3px solid var(--primary)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, marginBottom: '4px' }}>{n.title}</div>
+                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{n.body}</div>
+                      </div>
+                      <span className="badge badge-primary" style={{ flexShrink: 0 }}>{n.category}</span>
                     </div>
-                    <span className="badge badge-primary" style={{ flexShrink: 0 }}>{n.category}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={12} />
+                        {formatNoticeTime(n.date)} · {new Date(n.date).toLocaleDateString()}
+                      </span>
+                      {isTeacher && (
+                        <span style={{ color: '#0ea5e9', fontWeight: 600, fontSize: '11px' }}>
+                          Expires in ~{hoursLeft}h
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                    {new Date(n.date).toLocaleDateString()}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

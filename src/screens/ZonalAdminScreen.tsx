@@ -3,7 +3,8 @@ import { Building2, ShieldCheck, Key, Activity, Send, CheckCircle2, AlertTriangl
 import emailjs from '@emailjs/browser';
 import { useAuth } from '../contexts/AuthContext';
 import { databaseService } from '../data/database';
-import type { GovernmentSchool, Notice, ZonalKeyRequest } from '../data/models';
+import type { GovernmentSchool, Notice, ZonalKeyRequest, LeaveRequest } from '../data/models';
+import { calculateLeaveDays } from '../data/models';
 import '../components/AppShell.css';
 
 export default function ZonalAdminScreen() {
@@ -38,6 +39,13 @@ export default function ZonalAdminScreen() {
 
   const [recentNotices, setRecentNotices] = useState<Notice[]>([]);
 
+  // Principal Leave Requests state
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [leaveCommentTarget, setLeaveCommentTarget] = useState<string | null>(null);
+  const [leaveComment, setLeaveComment] = useState('');
+  const [leaveActionLoading, setLeaveActionLoading] = useState<string | null>(null);
+  const [leaveSuccessMsg, setLeaveSuccessMsg] = useState('');
+
   useEffect(() => {
     loadSchools();
 
@@ -57,6 +65,14 @@ export default function ZonalAdminScreen() {
       (err) => console.error('[ZonalAdmin] Notices subscription error:', err)
     );
 
+    // 3. Real-time listener for leave requests
+    const unsubLeave = databaseService.subscribeToLeaveRequests(
+      (reqs) => {
+        setLeaveRequests(reqs);
+      },
+      (err) => console.error('[ZonalAdmin] Leave subscription error:', err)
+    );
+
     // Also reload when admin tab is re-focused
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
@@ -69,9 +85,30 @@ export default function ZonalAdminScreen() {
     return () => {
       unsubKeyRequests();
       unsubNotices();
+      unsubLeave();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  async function handleAdminLeaveDecision(req: LeaveRequest, status: 'approved' | 'rejected', remark?: string) {
+    setLeaveActionLoading(req.id);
+    try {
+      await databaseService.updateLeaveRequest({
+        ...req,
+        status,
+        adminComment: remark || leaveComment || null,
+        reviewedByRole: 'zonal_admin',
+      });
+      setLeaveSuccessMsg(`Principal ${req.teacherName}'s leave request has been ${status.toUpperCase()}!`);
+      setLeaveCommentTarget(null);
+      setLeaveComment('');
+      setTimeout(() => setLeaveSuccessMsg(''), 4000);
+    } catch (err) {
+      console.error('Failed to update principal leave decision:', err);
+    } finally {
+      setLeaveActionLoading(null);
+    }
+  }
 
   async function handleDeleteKeyRequest(id: string) {
     await databaseService.deleteZonalKeyRequest(id);
@@ -302,8 +339,146 @@ export default function ZonalAdminScreen() {
           </div>
         </div>
 
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.15)' }}>
+            <Calendar size={22} color="#ef4444" />
+          </div>
+          <div className="stat-info">
+            <div className="stat-value" style={{ color: '#ef4444' }}>
+              {leaveRequests.filter(r => r.applicantRole === 'principal' && r.status === 'pending').length}
+            </div>
+            <div className="stat-label">Principal Leave Requests</div>
+          </div>
+        </div>
 
       </div>
+
+      {/* Leave action success feedback banner */}
+      {leaveSuccessMsg && (
+        <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid #10b981', color: '#10b981', padding: '12px 18px', borderRadius: '10px', marginBottom: '20px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <CheckCircle size={20} />
+          <span>{leaveSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* Pending Principal Leave Applications Card */}
+      {leaveRequests.filter(r => r.applicantRole === 'principal' && r.status === 'pending').length > 0 && (
+        <div className="card" style={{ border: '2px solid #ef4444', background: 'rgba(239, 68, 68, 0.03)', marginBottom: '24px', boxShadow: '0 4px 20px rgba(239, 68, 68, 0.12)' }}>
+          <div className="card-header" style={{ background: 'rgba(239, 68, 68, 0.08)', borderBottom: '1px solid rgba(239, 68, 68, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 className="card-title" style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
+              <AlertCircle size={18} />
+              Pending Principal Leave Applications ({leaveRequests.filter(r => r.applicantRole === 'principal' && r.status === 'pending').length})
+            </h2>
+            <span className="badge" style={{ background: '#ef4444', color: '#fff', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+              Zonal Approval Required
+            </span>
+          </div>
+
+          <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
+            {leaveRequests.filter(r => r.applicantRole === 'principal' && r.status === 'pending').map(req => (
+              <div key={req.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-color)' }}>
+                      🏛️ {req.teacherName}
+                    </div>
+                    <span className="badge" style={{ fontSize: '11px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', textTransform: 'capitalize' }}>
+                      {req.type} Leave {req.isHalfDay ? '(Half Day)' : ''}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0284c7', marginBottom: '10px' }}>
+                    {req.schoolName || 'Government School'} <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>({req.schoolCensusCode})</span>
+                  </div>
+
+                  <div style={{ background: 'var(--bg-hover)', padding: '10px', borderRadius: '8px', marginBottom: '12px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Period:</span>
+                      <strong style={{ color: 'var(--text-color)' }}>
+                        {req.startDate} {req.endDate && req.endDate !== req.startDate ? `to ${req.endDate}` : ''}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Reason: </span>
+                      <span style={{ color: 'var(--text-color)', fontStyle: 'italic' }}>"{req.reason}"</span>
+                    </div>
+                  </div>
+
+                  {leaveCommentTarget === req.id && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                        Zonal Office Directive / Remark:
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Approved. Deputy Principal assigned as acting head."
+                        value={leaveComment}
+                        onChange={e => setLeaveComment(e.target.value)}
+                        style={{ fontSize: '12px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                  {leaveCommentTarget !== req.id ? (
+                    <>
+                      <button
+                        className="btn btn-success btn-sm"
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        disabled={leaveActionLoading === req.id}
+                        onClick={() => handleAdminLeaveDecision(req, 'approved')}
+                      >
+                        <Check size={14} /> Approve Leave
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--text-muted)', fontSize: '11px' }}
+                        onClick={() => { setLeaveCommentTarget(req.id); setLeaveComment(''); }}
+                      >
+                        With Remarks...
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        disabled={leaveActionLoading === req.id}
+                        onClick={() => handleAdminLeaveDecision(req, 'rejected')}
+                      >
+                        <X size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-success btn-sm"
+                        style={{ flex: 1 }}
+                        disabled={leaveActionLoading === req.id}
+                        onClick={() => handleAdminLeaveDecision(req, 'approved', leaveComment)}
+                      >
+                        <Check size={14} /> Confirm Approval
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        style={{ flex: 1 }}
+                        disabled={leaveActionLoading === req.id}
+                        onClick={() => handleAdminLeaveDecision(req, 'rejected', leaveComment)}
+                      >
+                        <X size={14} /> Reject
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setLeaveCommentTarget(null)}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Pending Zonal Key Requests Alert Card */}
       {keyRequests.filter(r => r.status === 'pending').length > 0 && (

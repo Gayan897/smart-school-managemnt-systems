@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, Fragment } from 'react';
 import {
   Save, UserPlus, Eye, AlertTriangle, GraduationCap,
   RefreshCw, UserCheck, Send, PhoneCall, Check, ExternalLink, X,
-  Trash2, Copy, Sparkles, Smartphone, Share2, ShieldCheck, QrCode, Laptop
+  Trash2, Copy, Sparkles, Smartphone, Share2, ShieldCheck, QrCode, Laptop,
+  Calendar, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Search, AlertCircle, Filter, MessageCircle, BarChart2
 } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
@@ -98,8 +100,28 @@ export default function AttendanceScreen() {
     }, 1200);
   }
 
-  // Principal filters
+  // Principal filters & period selection
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
+  const [periodType, setPeriodType] = useState<'term' | 'monthly' | 'weekly' | 'daily'>('term');
+  const [selectedTerm, setSelectedTerm] = useState<number>(3); // Default to Term 3 (Sep - Dec) for current month
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [selectedWeekDate, setSelectedWeekDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // Low Attendance tracking state
+  const [lowAttendanceThreshold, setLowAttendanceThreshold] = useState<number>(75);
+  const [lowAttendanceScope, setLowAttendanceScope] = useState<'period' | 'all_time'>('period');
+  const [lowAttSearch, setLowAttSearch] = useState<string>('');
+
+  // Expandable class row state in Principal class table
+  const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
+
+  // Demo seeding state
+  const [seedingData, setSeedingData] = useState(false);
+  const [seedSuccessMsg, setSeedSuccessMsg] = useState<string | null>(null);
 
   // Add student state (teacher only)
   const [showAddModal, setShowAddModal] = useState(false);
@@ -382,36 +404,167 @@ export default function AttendanceScreen() {
     excused: 'active-excused',
   };
 
-  // ─── Principal: class-wise attendance summary for selected date ───
+  // ─── Week Range Calculation Helpers ───
+  function getWeekBounds(dateStr: string) {
+    const base = new Date(dateStr + 'T00:00:00');
+    const day = base.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const mon = new Date(base);
+    mon.setDate(base.getDate() + diffToMon);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    return {
+      startDate: mon.toISOString().split('T')[0],
+      endDate: sun.toISOString().split('T')[0],
+      mon,
+      sun,
+    };
+  }
+
+  function handleShiftWeek(direction: -1 | 1) {
+    const d = new Date(selectedWeekDate + 'T00:00:00');
+    d.setDate(d.getDate() + (direction * 7));
+    setSelectedWeekDate(d.toISOString().split('T')[0]);
+  }
+
+  // ─── Principal: Active Period Date Bounds & Labels ───
+  const periodDateRange = useMemo(() => {
+    if (periodType === 'daily') {
+      const d = new Date(selectedDate + 'T00:00:00');
+      const formatted = isNaN(d.getTime())
+        ? selectedDate
+        : d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+      return {
+        startDate: selectedDate,
+        endDate: selectedDate,
+        label: formatted,
+        badgeText: `Single Day: ${selectedDate}`,
+      };
+    }
+
+    if (periodType === 'weekly') {
+      const { startDate, endDate, mon, sun } = getWeekBounds(selectedWeekDate);
+      const monStr = mon.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const sunStr = sun.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      return {
+        startDate,
+        endDate,
+        label: `${monStr} – ${sunStr}`,
+        badgeText: `Weekly Window: ${startDate} to ${endDate}`,
+      };
+    }
+
+    if (periodType === 'monthly') {
+      const [yStr, mStr] = selectedMonth.split('-');
+      const y = parseInt(yStr, 10) || new Date().getFullYear();
+      const m = parseInt(mStr, 10) || (new Date().getMonth() + 1);
+      const lastDay = new Date(y, m, 0).getDate();
+      const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+      const endDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      const monthName = new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      return {
+        startDate,
+        endDate,
+        label: monthName,
+        badgeText: `Monthly Window: ${startDate} to ${endDate}`,
+      };
+    }
+
+    // Term-wise (Sri Lankan School Academic Calendar)
+    const y = selectedAcademicYear;
+    let startDate = `${y}-01-01`;
+    let endDate = `${y}-04-30`;
+    let termName = `Term 1 (First Term, ${y})`;
+    if (selectedTerm === 2) {
+      startDate = `${y}-05-01`;
+      endDate = `${y}-08-31`;
+      termName = `Term 2 (Second Term, ${y})`;
+    } else if (selectedTerm === 3) {
+      startDate = `${y}-09-01`;
+      endDate = `${y}-12-31`;
+      termName = `Term 3 (Third Term, ${y})`;
+    }
+    return {
+      startDate,
+      endDate,
+      label: termName,
+      badgeText: `Term Window: ${startDate} to ${endDate}`,
+    };
+  }, [periodType, selectedDate, selectedWeekDate, selectedMonth, selectedTerm, selectedAcademicYear]);
+
+  // ─── Filtered Attendance Records for Active Period ───
+  const periodRecords = useMemo(() => {
+    if (!isPrincipal) return [];
+    const { startDate, endDate } = periodDateRange;
+    return existing.filter(a => {
+      const d = a.date.split('T')[0];
+      return d >= startDate && d <= endDate;
+    });
+  }, [isPrincipal, existing, periodDateRange]);
+
+  // ─── Principal: Class-wise Attendance & Percentages for Selected Period ───
   const classWiseData = useMemo(() => {
     if (!isPrincipal) return [];
-
-    const dateRecords = existing.filter(a => a.date.startsWith(selectedDate));
 
     return filteredClasses.map(cls => {
       const classStudents = allStudents.filter(s => s.classRoom === cls.id);
       const classStudentIds = new Set(classStudents.map(s => s.id));
-      const classRecords = dateRecords.filter(r => classStudentIds.has(r.studentId));
+      const classRecords = periodRecords.filter(r => classStudentIds.has(r.studentId));
 
       const present = classRecords.filter(r => r.status === 'present').length;
       const absent = classRecords.filter(r => r.status === 'absent').length;
       const late = classRecords.filter(r => r.status === 'late').length;
       const excused = classRecords.filter(r => r.status === 'excused').length;
       const total = classRecords.length;
+
+      // Percentage calculations
       const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+      const absentRate = total > 0 ? Math.round((absent / total) * 100) : 0;
+      const lateRate = total > 0 ? Math.round((late / total) * 100) : 0;
+      const excusedRate = total > 0 ? Math.round((excused / total) * 100) : 0;
+
+      // Individual student breakdown for this class in this period
+      const studentBreakdown = classStudents.map(s => {
+        const sRecs = classRecords.filter(r => r.studentId === s.id);
+        const sTotal = sRecs.length;
+        const sPresent = sRecs.filter(r => r.status === 'present').length;
+        const sAbsent = sRecs.filter(r => r.status === 'absent').length;
+        const sLate = sRecs.filter(r => r.status === 'late').length;
+        const sExcused = sRecs.filter(r => r.status === 'excused').length;
+        const sRate = sTotal > 0 ? Math.round((sPresent / sTotal) * 100) : 0;
+        return {
+          student: s,
+          total: sTotal,
+          present: sPresent,
+          absent: sAbsent,
+          late: sLate,
+          excused: sExcused,
+          rate: sRate,
+        };
+      }).sort((a, b) => a.rate - b.rate);
 
       return {
         classId: cls.id,
         grade: cls.grade,
         section: cls.section,
         stream: cls.stream,
+        homeroomTeacherName: cls.homeroomTeacherName,
         totalStudents: classStudents.length,
-        present, absent, late, excused, total, rate,
+        present,
+        absent,
+        late,
+        excused,
+        total,
+        rate,
+        absentRate,
+        lateRate,
+        excusedRate,
+        studentBreakdown,
       };
     });
-  }, [isPrincipal, existing, selectedDate, filteredClasses, allStudents]);
+  }, [isPrincipal, periodRecords, filteredClasses, allStudents]);
 
-  // ─── Principal: overall summary across all filtered classes ───
+  // ─── Principal: Overall Summary across Filtered Classes ───
   const overallSummary = useMemo(() => {
     if (!isPrincipal) return null;
     const present = classWiseData.reduce((s, c) => s + c.present, 0);
@@ -419,37 +572,114 @@ export default function AttendanceScreen() {
     const late = classWiseData.reduce((s, c) => s + c.late, 0);
     const excused = classWiseData.reduce((s, c) => s + c.excused, 0);
     const total = present + absent + late + excused;
-    return { present, absent, late, excused, total };
+    const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+    const totalStudents = classWiseData.reduce((s, c) => s + c.totalStudents, 0);
+    return { present, absent, late, excused, total, rate, totalStudents };
   }, [isPrincipal, classWiseData]);
 
-  // ─── Principal: low attendance students (< 75% attendance rate across all records) ───
+  // ─── Principal: Low Attendance Students (< threshold %) ───
   const lowAttendanceStudents = useMemo(() => {
     if (!isPrincipal) return [];
 
-    const LOW_THRESHOLD = 75; // percentage
-
-    // Only consider students in the filtered classes
     const classIds = new Set(filteredClasses.map(c => c.id));
     const relevantStudents = allStudents.filter(s => classIds.has(s.classRoom));
 
-    const result: { student: Student; totalRecords: number; presentCount: number; rate: number }[] = [];
+    // Choose target record pool based on scope
+    const targetPool = lowAttendanceScope === 'period' ? periodRecords : existing;
+
+    const result: {
+      student: Student;
+      totalRecords: number;
+      presentCount: number;
+      absentCount: number;
+      lateCount: number;
+      rate: number;
+      riskLevel: 'critical' | 'at_risk';
+    }[] = [];
 
     for (const student of relevantStudents) {
-      const studentRecords = existing.filter(r => r.studentId === student.id);
-      if (studentRecords.length === 0) continue; // skip if no records at all
+      const studentRecords = targetPool.filter(r => r.studentId === student.id);
+      if (studentRecords.length === 0) continue; // skip if student has no records in this timeframe
 
       const presentCount = studentRecords.filter(r => r.status === 'present').length;
+      const absentCount = studentRecords.filter(r => r.status === 'absent').length;
+      const lateCount = studentRecords.filter(r => r.status === 'late').length;
       const rate = Math.round((presentCount / studentRecords.length) * 100);
 
-      if (rate < LOW_THRESHOLD) {
-        result.push({ student, totalRecords: studentRecords.length, presentCount, rate });
+      if (rate < lowAttendanceThreshold) {
+        result.push({
+          student,
+          totalRecords: studentRecords.length,
+          presentCount,
+          absentCount,
+          lateCount,
+          rate,
+          riskLevel: rate < 50 ? 'critical' : 'at_risk',
+        });
       }
     }
 
-    // Sort by rate ascending (worst first)
-    result.sort((a, b) => a.rate - b.rate);
-    return result;
-  }, [isPrincipal, filteredClasses, allStudents, existing]);
+    // Filter by search query if entered
+    const query = lowAttSearch.trim().toLowerCase();
+    const filtered = query
+      ? result.filter(r =>
+          r.student.name.toLowerCase().includes(query) ||
+          r.student.id.toLowerCase().includes(query) ||
+          (r.student.admissionNumber && r.student.admissionNumber.toLowerCase().includes(query)) ||
+          r.student.classRoom.toLowerCase().includes(query)
+        )
+      : result;
+
+    // Sort by rate ascending (worst attendance first)
+    return filtered.sort((a, b) => a.rate - b.rate);
+  }, [isPrincipal, filteredClasses, allStudents, periodRecords, existing, lowAttendanceScope, lowAttendanceThreshold, lowAttSearch]);
+
+  // ─── Demonstration / Benchmark Attendance Generator for Principal Testing ───
+  async function handleSeedDemoAttendance() {
+    if (allStudents.length === 0) return;
+    setSeedingData(true);
+    try {
+      const datesToGenerate = [
+        // Term 1 (Feb, Mar, Apr 2026)
+        '2026-02-02', '2026-02-09', '2026-02-16', '2026-03-02', '2026-03-16', '2026-04-06',
+        // Term 2 (Jun, Jul, Aug 2026)
+        '2026-06-01', '2026-06-15', '2026-07-06', '2026-07-20', '2026-08-03', '2026-08-17',
+        // Term 3 (Sep 2026)
+        '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'
+      ];
+
+      const records: AttendanceRecord[] = [];
+      for (let i = 0; i < allStudents.length; i++) {
+        const student = allStudents[i];
+        // Create realistic profiles: high, moderate, and low attendance
+        const profileRate = i === 0 ? 0.95 : i === 1 ? 0.62 : i === 2 ? 0.44 : 0.85;
+
+        for (const d of datesToGenerate) {
+          const rand = Math.random();
+          let status: AttendanceStatus = 'present';
+          if (rand > profileRate) {
+            status = rand > (profileRate + 0.15) ? 'absent' : 'late';
+          }
+          records.push({
+            id: `seed_${student.id}_${d.replace(/-/g, '')}`,
+            studentId: student.id,
+            date: d,
+            status,
+          });
+        }
+      }
+
+      for (const rec of records) {
+        await databaseService.saveAttendance(rec);
+      }
+      setSeedSuccessMsg(`✓ Generated ${records.length} sample attendance records across Terms 1, 2, and 3!`);
+      setTimeout(() => setSeedSuccessMsg(null), 5000);
+    } catch (e) {
+      console.error('Failed to populate demo attendance records:', e);
+    } finally {
+      setSeedingData(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -460,16 +690,28 @@ export default function AttendanceScreen() {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // PRINCIPAL VIEW — class-wise summary only, no student names
+  // PRINCIPAL VIEW — Term-wise, Monthly, Weekly with Percentages & Low Attendance
   // ═══════════════════════════════════════════════════════════════════
   if (isPrincipal) {
+    const chartData = classWiseData
+      .filter(c => c.total > 0)
+      .map(c => ({
+        name: `Gr ${c.grade}${c.section}`,
+        rate: c.rate,
+        present: c.present,
+        total: c.total,
+      }));
+
     return (
       <div className="page">
-        <div className="page-header">
+        {/* ── Page Header ── */}
+        <div className="page-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h1 className="page-title">{t('attendance', language)}</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
-              <p className="page-subtitle" style={{ margin: 0 }}>{t('viewAttendance', language)}</p>
+              <p className="page-subtitle" style={{ margin: 0 }}>
+                Principal Academic Governance & Attendance Intelligence
+              </p>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
                 background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)',
@@ -481,45 +723,78 @@ export default function AttendanceScreen() {
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '13px' }}>
-            <Eye size={16} />
-            <span>{t('viewAttendance', language)}</span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {existing.length < 15 && (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleSeedDemoAttendance}
+                disabled={seedingData || allStudents.length === 0}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'none' }}
+                title="Populate realistic attendance records for Term 1, Term 2, and Term 3"
+              >
+                <Sparkles size={14} />
+                {seedingData ? 'Populating...' : '⚡ Seed Demo Term Data'}
+              </button>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '13px', background: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <Users size={15} color="var(--primary)" />
+              <span><strong>{allStudents.length}</strong> Enrolled Students</span>
+            </div>
           </div>
         </div>
 
-        {/* ── Overall Summary Stats ── */}
-        {overallSummary && overallSummary.total > 0 && (
-          <div className="stats-grid" style={{ marginBottom: '20px' }}>
-            {([
-              { key: 'present' as const, color: 'var(--success)', value: overallSummary.present },
-              { key: 'absent' as const, color: 'var(--danger)', value: overallSummary.absent },
-              { key: 'late' as const, color: 'var(--warning)', value: overallSummary.late },
-              { key: 'excused' as const, color: 'var(--info)', value: overallSummary.excused },
-            ]).map(item => (
-              <div className="stat-card" key={item.key}>
-                <div className="stat-icon" style={{ background: `${item.color}22` }}>
-                  <span style={{ fontSize: '22px', color: item.color, fontWeight: 700 }}>
-                    {item.value}
-                  </span>
-                </div>
-                <div className="stat-info">
-                  <div className="stat-value" style={{ color: item.color }}>{
-                    overallSummary.total > 0
-                      ? Math.round((item.value / overallSummary.total) * 100) + '%'
-                      : '0%'
-                  }</div>
-                  <div className="stat-label">{t(item.key, language)}</div>
-                </div>
-              </div>
-            ))}
+        {/* Demo feedback toast */}
+        {seedSuccessMsg && (
+          <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid #10b981', color: '#10b981', padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Check size={16} />
+            {seedSuccessMsg}
           </div>
         )}
 
-        {/* ── Filters: Grade + Date ── */}
-        <div className="card" style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        {/* ── Period Selector & Control Center ── */}
+        <div className="card" style={{ marginBottom: '20px', border: '1px solid var(--border)' }}>
+          {/* Period Tabs: Term-wise | Monthly | Weekly | Daily */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingBottom: '16px', borderBottom: '1px solid var(--border)', marginBottom: '16px' }}>
+            {[
+              { id: 'term' as const, label: t('termWise', language), icon: Calendar, desc: '3 Sri Lankan School Terms' },
+              { id: 'monthly' as const, label: t('monthly', language), icon: BarChart2, desc: 'Full Calendar Month' },
+              { id: 'weekly' as const, label: t('weekly', language), icon: Clock, desc: '7-Day Academic Week' },
+              { id: 'daily' as const, label: t('daily', language), icon: Eye, desc: 'Single Specific Day' },
+            ].map(tab => {
+              const active = periodType === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setPeriodType(tab.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: active ? '2px solid var(--primary)' : '1px solid var(--border)',
+                    background: active ? 'rgba(2, 132, 199, 0.12)' : 'var(--bg-hover)',
+                    color: active ? 'var(--primary)' : 'var(--text-color)',
+                    fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Icon size={16} color={active ? 'var(--primary)' : 'var(--text-muted)'} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sub-controls based on active period */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', alignItems: 'flex-end' }}>
+            {/* 1. Grade Selector (Always visible) */}
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">{t('selectGrade', language)}</label>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>{t('selectGrade', language)}</label>
               <select
                 id="att-grade-select"
                 className="form-control"
@@ -534,25 +809,268 @@ export default function AttendanceScreen() {
                 ))}
               </select>
             </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">{t('selectDate', language)}</label>
-              <input
-                id="att-date"
-                type="date"
-                className="form-control"
-                value={selectedDate}
-                max={new Date().toISOString().split('T')[0]}
-                onChange={e => setSelectedDate(e.target.value)}
-              />
+
+            {/* 2. Controls when TERM-WISE */}
+            {periodType === 'term' && (
+              <>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Academic Term</label>
+                  <select
+                    className="form-control"
+                    value={selectedTerm}
+                    onChange={e => setSelectedTerm(Number(e.target.value))}
+                    style={{ fontWeight: 600 }}
+                  >
+                    <option value={1}>{t('term1', language)}</option>
+                    <option value={2}>{t('term2', language)}</option>
+                    <option value={3}>{t('term3', language)}</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Academic Year</label>
+                  <select
+                    className="form-control"
+                    value={selectedAcademicYear}
+                    onChange={e => setSelectedAcademicYear(Number(e.target.value))}
+                  >
+                    {[2026, 2025, 2024].map(y => (
+                      <option key={y} value={y}>{y} Academic Year</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* 3. Controls when MONTHLY */}
+            {periodType === 'monthly' && (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Select Month & Year</label>
+                <input
+                  type="month"
+                  className="form-control"
+                  value={selectedMonth}
+                  onChange={e => setSelectedMonth(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* 4. Controls when WEEKLY */}
+            {periodType === 'weekly' && (
+              <>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Week Containing Date</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={selectedWeekDate}
+                    onChange={e => setSelectedWeekDate(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleShiftWeek(-1)}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', border: '1px solid var(--border)' }}
+                    title="Previous Week"
+                  >
+                    <ChevronLeft size={14} /> {t('prevWeek', language)}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setSelectedWeekDate(new Date().toISOString().split('T')[0])}
+                    style={{ border: '1px solid var(--border)', fontSize: '11px', fontWeight: 600 }}
+                  >
+                    {t('currentWeek', language)}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleShiftWeek(1)}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', border: '1px solid var(--border)' }}
+                    title="Next Week"
+                  >
+                    {t('nextWeek', language)} <ChevronRight size={14} />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* 5. Controls when DAILY */}
+            {periodType === 'daily' && (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>{t('selectDate', language)}</label>
+                <input
+                  id="att-date"
+                  type="date"
+                  className="form-control"
+                  value={selectedDate}
+                  max={new Date().toISOString().split('T')[0]}
+                  onChange={e => setSelectedDate(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Active Period Date Bounds Badge */}
+          <div style={{
+            marginTop: '16px',
+            padding: '10px 14px',
+            background: 'var(--bg-hover)',
+            borderRadius: '8px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+            fontSize: '12px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={15} color="var(--primary)" />
+              <span style={{ fontWeight: 700, color: 'var(--text-color)' }}>
+                {periodDateRange.label}
+              </span>
+              <span className="badge" style={{ fontSize: '10px', background: 'rgba(2, 132, 199, 0.15)', color: 'var(--primary)' }}>
+                {periodDateRange.badgeText}
+              </span>
+            </div>
+            <div style={{ color: 'var(--text-muted)' }}>
+              Logged Attendance Records in Scope: <strong style={{ color: 'var(--text-color)' }}>{periodRecords.length}</strong>
             </div>
           </div>
         </div>
 
-        {/* ── Class-wise Attendance Table ── */}
-        <div className="card" style={{ marginBottom: '20px' }}>
-          <div className="card-header">
-            <h3 className="card-title">{t('classWiseSummary', language)}</h3>
+        {/* ── Overall Summary Stats (As Percentages) ── */}
+        <div className="stats-grid" style={{ marginBottom: '20px' }}>
+          {/* Main Attendance Rate Card */}
+          <div className="stat-card" style={{ borderLeft: '4px solid var(--primary)', position: 'relative' }}>
+            <div className="stat-icon" style={{ background: 'rgba(2, 132, 199, 0.15)' }}>
+              <span style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>%</span>
+            </div>
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--primary)' }}>
+                {overallSummary && overallSummary.total > 0 ? `${overallSummary.rate}%` : '0%'}
+              </div>
+              <div className="stat-label">{t('overallAttendanceRate', language)}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                {overallSummary?.total || 0} total sessions recorded
+              </div>
+            </div>
           </div>
+
+          {/* Present */}
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.15)' }}>
+              <UserCheck size={20} color="var(--success)" />
+            </div>
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--success)' }}>
+                {overallSummary && overallSummary.total > 0
+                  ? `${Math.round((overallSummary.present / overallSummary.total) * 100)}%`
+                  : '0%'}
+              </div>
+              <div className="stat-label">{t('present', language)} ({overallSummary?.present || 0})</div>
+            </div>
+          </div>
+
+          {/* Absent */}
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.15)' }}>
+              <AlertTriangle size={20} color="var(--danger)" />
+            </div>
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--danger)' }}>
+                {overallSummary && overallSummary.total > 0
+                  ? `${Math.round((overallSummary.absent / overallSummary.total) * 100)}%`
+                  : '0%'}
+              </div>
+              <div className="stat-label">{t('absent', language)} ({overallSummary?.absent || 0})</div>
+            </div>
+          </div>
+
+          {/* Late */}
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>
+              <Clock size={20} color="var(--warning)" />
+            </div>
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--warning)' }}>
+                {overallSummary && overallSummary.total > 0
+                  ? `${Math.round((overallSummary.late / overallSummary.total) * 100)}%`
+                  : '0%'}
+              </div>
+              <div className="stat-label">{t('late', language)} ({overallSummary?.late || 0})</div>
+            </div>
+          </div>
+
+          {/* Excused */}
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.15)' }}>
+              <ShieldCheck size={20} color="var(--info)" />
+            </div>
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--info)' }}>
+                {overallSummary && overallSummary.total > 0
+                  ? `${Math.round((overallSummary.excused / overallSummary.total) * 100)}%`
+                  : '0%'}
+              </div>
+              <div className="stat-label">{t('excused', language)} ({overallSummary?.excused || 0})</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Visual Class Comparison Bar Chart ── */}
+        {chartData.length > 0 && (
+          <div className="card" style={{ marginBottom: '20px' }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BarChart2 size={18} color="var(--primary)" />
+                Class Attendance Percentage Comparison ({periodDateRange.label})
+              </h3>
+              <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: '#10b981', display: 'inline-block' }} /> &ge; 80% High
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: '#f59e0b', display: 'inline-block' }} /> 65-79% Fair
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: '#ef4444', display: 'inline-block' }} /> &lt; 65% Low
+                </span>
+              </div>
+            </div>
+            <div style={{ width: '100%', height: 220, marginTop: '12px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                  <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
+                  <YAxis domain={[0, 100]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} tickFormatter={v => `${v}%`} />
+                  <Tooltip
+                    contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px' }}
+                    formatter={(val: any) => [`${val}% Attendance Rate`, 'Rate']}
+                  />
+                  <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, index) => {
+                      const fill = entry.rate >= 80 ? '#10b981' : entry.rate >= 65 ? '#f59e0b' : '#ef4444';
+                      return <Cell key={`cell-${index}`} fill={fill} />;
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* ── Class-wise Attendance Table with Percentages & Expandable Rosters ── */}
+        <div className="card" style={{ marginBottom: '20px' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 className="card-title">{t('classWiseSummary', language)} — {periodDateRange.label}</h3>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Click row or expand icon to view individual student percentages
+            </span>
+          </div>
+
           {classWiseData.length === 0 ? (
             <div className="empty-state">
               <p>{t('noAttendanceRecords', language)}</p>
@@ -562,127 +1080,411 @@ export default function AttendanceScreen() {
               <table className="table">
                 <thead>
                   <tr>
+                    <th style={{ width: '40px' }}></th>
                     <th>{t('class', language)}</th>
                     <th>{t('stream', language)}</th>
+                    <th>Teacher</th>
                     <th style={{ textAlign: 'center' }}>{t('totalStudents', language)}</th>
-                    <th style={{ textAlign: 'center', color: 'var(--success)' }}>{t('present', language)}</th>
-                    <th style={{ textAlign: 'center', color: 'var(--danger)' }}>{t('absent', language)}</th>
-                    <th style={{ textAlign: 'center', color: 'var(--warning)' }}>{t('late', language)}</th>
-                    <th style={{ textAlign: 'center', color: 'var(--info)' }}>{t('excused', language)}</th>
-                    <th style={{ textAlign: 'center' }}>{t('attendanceRate', language)}</th>
+                    <th style={{ textAlign: 'center' }}>Sessions</th>
+                    <th style={{ textAlign: 'center', color: 'var(--success)' }}>{t('present', language)} (%)</th>
+                    <th style={{ textAlign: 'center', color: 'var(--danger)' }}>{t('absent', language)} (%)</th>
+                    <th style={{ textAlign: 'center', color: 'var(--warning)' }}>{t('late', language)} (%)</th>
+                    <th style={{ textAlign: 'center', minWidth: '130px' }}>{t('attendanceRate', language)}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {classWiseData.map(row => (
-                    <tr key={row.classId}>
-                      <td style={{ fontWeight: 600, fontSize: '15px' }}>
-                        {t('grade', language)} {row.grade}{row.section}
-                      </td>
-                      <td>
-                        <span className="badge badge-primary">
-                          {row.stream === 'ol' ? t('olStream', language) : t('alStream', language)}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 500 }}>{row.totalStudents}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ color: 'var(--success)', fontWeight: 600 }}>{row.present}</span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ color: 'var(--danger)', fontWeight: 600 }}>{row.absent}</span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ color: 'var(--warning)', fontWeight: 600 }}>{row.late}</span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{ color: 'var(--info)', fontWeight: 600 }}>{row.excused}</span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {row.total > 0 ? (
-                          <span
-                            className={`badge ${row.rate >= 75 ? 'badge-success' : row.rate >= 50 ? 'badge-warning' : 'badge-danger'}`}
-                            style={{ fontSize: '12px', fontWeight: 700, minWidth: '48px', justifyContent: 'center' }}
-                          >
-                            {row.rate}%
-                          </span>
-                        ) : (
-                          <span className="badge badge-muted">—</span>
+                  {classWiseData.map(row => {
+                    const isExpanded = expandedClassId === row.classId;
+                    const badgeClass = row.total > 0
+                      ? row.rate >= 80 ? 'badge-success' : row.rate >= 65 ? 'badge-warning' : 'badge-danger'
+                      : 'badge-muted';
+
+                    return (
+                      <React.Fragment key={row.classId}>
+                        <tr
+                          style={{ cursor: 'pointer', background: isExpanded ? 'var(--bg-hover)' : undefined }}
+                          onClick={() => setExpandedClassId(isExpanded ? null : row.classId)}
+                        >
+                          <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </td>
+                          <td style={{ fontWeight: 700, fontSize: '14px' }}>
+                            Grade {row.grade}{row.section}
+                          </td>
+                          <td>
+                            <span className="badge badge-primary" style={{ fontSize: '10px' }}>
+                              {row.stream === 'ol' ? t('olStream', language) : t('alStream', language)}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {row.homeroomTeacherName || '—'}
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{row.totalStudents}</td>
+                          <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{row.total}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                              {row.present} <span style={{ fontSize: '11px', opacity: 0.8 }}>({row.rate}%)</span>
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ color: 'var(--danger)', fontWeight: 600 }}>
+                              {row.absent} <span style={{ fontSize: '11px', opacity: 0.8 }}>({row.absentRate}%)</span>
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ color: 'var(--warning)', fontWeight: 600 }}>
+                              {row.late} <span style={{ fontSize: '11px', opacity: 0.8 }}>({row.lateRate}%)</span>
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {row.total > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                <span className={`badge ${badgeClass}`} style={{ fontSize: '12px', fontWeight: 800, minWidth: '54px', justifyContent: 'center' }}>
+                                  {row.rate}%
+                                </span>
+                                <div style={{ width: '100%', maxWidth: '80px', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                                  <div
+                                    style={{
+                                      width: `${row.rate}%`,
+                                      height: '100%',
+                                      background: row.rate >= 80 ? '#10b981' : row.rate >= 65 ? '#f59e0b' : '#ef4444',
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="badge badge-muted" style={{ fontSize: '11px' }}>No Data</span>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* Expandable student roster for this class */}
+                        {isExpanded && (
+                          <tr style={{ background: 'var(--bg-hover)' }}>
+                            <td colSpan={10} style={{ padding: '16px 20px' }}>
+                              <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Users size={15} color="var(--primary)" />
+                                Student Attendance Breakdown for Grade {row.grade}{row.section} ({periodDateRange.label})
+                              </div>
+
+                              {row.studentBreakdown.length === 0 ? (
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '8px 0' }}>
+                                  No enrolled students in this class.
+                                </div>
+                              ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                                  {row.studentBreakdown.map(item => {
+                                    const sRateBadge = item.total > 0
+                                      ? item.rate >= 80 ? 'badge-success' : item.rate >= 65 ? 'badge-warning' : 'badge-danger'
+                                      : 'badge-muted';
+
+                                    return (
+                                      <div
+                                        key={item.student.id}
+                                        style={{
+                                          background: 'var(--bg-card)',
+                                          border: '1px solid var(--border)',
+                                          borderRadius: '8px',
+                                          padding: '10px 12px',
+                                          display: 'flex',
+                                          justifyContent: 'space-between',
+                                          alignItems: 'center',
+                                        }}
+                                      >
+                                        <div>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setSelectedProfileStudentId(item.student.id); }}
+                                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                                          >
+                                            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--primary)', textDecoration: 'underline' }}>
+                                              {item.student.name}
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                              Adm: {item.student.admissionNumber || item.student.id}
+                                            </div>
+                                          </button>
+                                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                            Present: {item.present} / {item.total} | Absent: {item.absent}
+                                          </div>
+                                        </div>
+
+                                        <div style={{ textAlign: 'right' }}>
+                                          {item.total > 0 ? (
+                                            <span className={`badge ${sRateBadge}`} style={{ fontWeight: 800, fontSize: '12px' }}>
+                                              {item.rate}%
+                                            </span>
+                                          ) : (
+                                            <span className="badge badge-muted" style={{ fontSize: '11px' }}>—</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        {/* ── Low Attendance Students ── */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertTriangle size={18} style={{ color: 'var(--danger)' }} />
-              {t('lowAttendanceStudents', language)}
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400 }}>
-                (&lt; 75%)
+        {/* ── Low Attendance Students Panel (< 75% or custom threshold) ── */}
+        <div className="card" style={{ border: '2px solid rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.02)' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <h3 className="card-title" style={{ margin: 0, color: '#ef4444' }}>
+                  {t('lowAttendanceStudents', language)}
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                  Students requiring academic attendance intervention & parental notification
+                </p>
+              </div>
+            </div>
+
+            {/* Threshold & Scope controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Scope Toggle: Period vs All-time */}
+              <div style={{ display: 'flex', background: 'var(--bg-hover)', borderRadius: '6px', padding: '2px', border: '1px solid var(--border)' }}>
+                <button
+                  type="button"
+                  onClick={() => setLowAttendanceScope('period')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: lowAttendanceScope === 'period' ? 700 : 500,
+                    background: lowAttendanceScope === 'period' ? 'var(--primary)' : 'transparent',
+                    color: lowAttendanceScope === 'period' ? '#fff' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t('inSelectedPeriod', language)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLowAttendanceScope('all_time')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: lowAttendanceScope === 'all_time' ? 700 : 500,
+                    background: lowAttendanceScope === 'all_time' ? 'var(--primary)' : 'transparent',
+                    color: lowAttendanceScope === 'all_time' ? '#fff' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t('allTimeYtd', language)}
+                </button>
+              </div>
+
+              {/* Threshold Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Threshold:</span>
+                <select
+                  className="form-control"
+                  style={{ width: 'auto', padding: '4px 8px', fontSize: '12px', height: '32px' }}
+                  value={lowAttendanceThreshold}
+                  onChange={e => setLowAttendanceThreshold(Number(e.target.value))}
+                >
+                  <option value={75}>&lt; 75% (Ministry Standard)</option>
+                  <option value={80}>&lt; 80% (Strict)</option>
+                  <option value={70}>&lt; 70% (Severe At-Risk)</option>
+                  <option value={60}>&lt; 60% (Critical Only)</option>
+                </select>
+              </div>
+
+              {/* Counter Badge */}
+              <span
+                className="badge"
+                style={{
+                  background: lowAttendanceStudents.length > 0 ? '#ef4444' : '#10b981',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: '11px',
+                  padding: '4px 10px',
+                }}
+              >
+                {lowAttendanceStudents.length} Students
               </span>
-            </h3>
+            </div>
           </div>
+
+          {/* Search bar within low attendance */}
+          {lowAttendanceStudents.length > 0 && (
+            <div style={{ padding: '0 16px 12px' }}>
+              <div style={{ position: 'relative', maxWidth: '360px' }}>
+                <Search size={15} style={{ position: 'absolute', left: 10, top: 9, color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Filter student name, admission # or class..."
+                  value={lowAttSearch}
+                  onChange={e => setLowAttSearch(e.target.value)}
+                  style={{ paddingLeft: '32px', fontSize: '12px', height: '34px' }}
+                />
+              </div>
+            </div>
+          )}
+
           {lowAttendanceStudents.length === 0 ? (
-            <div className="empty-state">
-              <p style={{ color: 'var(--success)' }}>✓ {t('noLowAttendance', language)}</p>
+            <div className="empty-state" style={{ padding: '36px 16px', textAlign: 'center' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#10b981' }}>
+                <Check size={24} />
+              </div>
+              <h4 style={{ margin: '0 0 4px', color: '#10b981', fontWeight: 700 }}>
+                {t('noLowAttendance', language)}
+              </h4>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                All enrolled students maintained attendance rates at or above {lowAttendanceThreshold}% {lowAttendanceScope === 'period' ? `during ${periodDateRange.label}` : 'across all records'}.
+              </p>
             </div>
           ) : (
             <div className="table-wrapper" style={{ border: 'none' }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>#</th>
+                    <th style={{ width: '40px' }}>#</th>
                     <th>{t('student', language)}</th>
                     <th>{t('class', language)}</th>
-                    <th style={{ textAlign: 'center' }}>{t('totalRecords', language)}</th>
-                    <th style={{ textAlign: 'center' }}>{t('present', language)}</th>
+                    <th style={{ textAlign: 'center' }}>Sessions</th>
+                    <th style={{ textAlign: 'center', color: 'var(--success)' }}>{t('present', language)}</th>
+                    <th style={{ textAlign: 'center', color: 'var(--danger)' }}>{t('absent', language)}</th>
                     <th style={{ textAlign: 'center' }}>{t('attendanceRate', language)}</th>
+                    <th>Risk Category</th>
+                    <th>Parent Contact</th>
+                    <th style={{ textAlign: 'center' }}>Direct Alert Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lowAttendanceStudents.map((item, i) => (
-                    <tr key={item.student.id}>
-                      <td style={{ color: 'var(--text-muted)', width: '40px' }}>{i + 1}</td>
-                      <td>
-                        <button
-                          type="button"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            color: 'inherit',
-                          }}
-                          onClick={() => setSelectedProfileStudentId(item.student.id)}
-                          title="Click to view full student profile"
-                        >
-                          <div style={{ fontWeight: 600, color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
-                            {item.student.name}
+                  {lowAttendanceStudents.map((item, i) => {
+                    const cleanPhone = (item.student.parentContact || '').replace(/[^0-9+]/g, '');
+                    const alertMsg = `Dear Parent,\nYour child ${item.student.name} (Class: ${item.student.classRoom}) has a low attendance rate of ${item.rate}% in school (${item.presentCount} present of ${item.totalRecords} sessions). Please ensure regular school attendance.\n— ${user?.schoolName || 'Principal Office'}`;
+                    const whatsappUrl = cleanPhone ? `https://wa.me/${cleanPhone.replace('+', '')}?text=${encodeURIComponent(alertMsg)}` : '';
+
+                    return (
+                      <tr key={item.student.id}>
+                        <td style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{i + 1}</td>
+                        <td>
+                          <button
+                            type="button"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              color: 'inherit',
+                            }}
+                            onClick={() => setSelectedProfileStudentId(item.student.id)}
+                            title="Click to view full student profile"
+                          >
+                            <div style={{ fontWeight: 700, color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                              {item.student.name}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                              Adm: {item.student.admissionNumber || item.student.id}
+                            </div>
+                          </button>
+                        </td>
+                        <td>
+                          <span className="badge badge-primary">{item.student.classRoom}</span>
+                        </td>
+                        <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{item.totalRecords}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--success)', fontWeight: 600 }}>{item.presentCount}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--danger)', fontWeight: 600 }}>{item.absentCount}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span
+                            className={`badge ${item.riskLevel === 'critical' ? 'badge-danger' : 'badge-warning'}`}
+                            style={{ fontSize: '13px', fontWeight: 800, minWidth: '54px', justifyContent: 'center' }}
+                          >
+                            {item.rate}%
+                          </span>
+                        </td>
+                        <td>
+                          {item.riskLevel === 'critical' ? (
+                            <span className="badge badge-danger" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              🚨 {t('criticalRisk', language)}
+                            </span>
+                          ) : (
+                            <span className="badge badge-warning" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              ⚠️ {t('atRisk', language)}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+                          {item.student.parentContact ? (
+                            <span>📱 {item.student.parentContact}</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>Not registered</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                            {cleanPhone && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                  onClick={() => {
+                                    handleSendSms({
+                                      student: item.student,
+                                      status: 'absent',
+                                      payload: {
+                                        messageText: alertMsg,
+                                        whatsappUrl,
+                                        smsUrl: `sms:${cleanPhone}?body=${encodeURIComponent(alertMsg)}`,
+                                        parentPhone: cleanPhone,
+                                      },
+                                    });
+                                  }}
+                                  title="Send Official SMS Warning to Parent"
+                                >
+                                  <Smartphone size={12} /> SMS
+                                </button>
+
+                                {whatsappUrl && (
+                                  <a
+                                    href={whatsappUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn-success btn-sm"
+                                    style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                                    title="Send WhatsApp Low Attendance Alert"
+                                  >
+                                    <MessageCircle size={12} /> WhatsApp
+                                  </a>
+                                )}
+                              </>
+                            )}
+
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ padding: '4px 8px', fontSize: '11px', border: '1px solid var(--border)' }}
+                              onClick={() => setSelectedProfileStudentId(item.student.id)}
+                              title="Open Student Profile Dossier"
+                            >
+                              <ExternalLink size={12} /> Profile
+                            </button>
                           </div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{item.student.id}</div>
-                        </button>
-                      </td>
-                      <td>
-                        <span className="badge badge-primary">{item.student.classRoom}</span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>{item.totalRecords}</td>
-                      <td style={{ textAlign: 'center' }}>{item.presentCount}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span
-                          className={`badge ${item.rate >= 50 ? 'badge-warning' : 'badge-danger'}`}
-                          style={{ fontSize: '12px', fontWeight: 700, minWidth: '48px', justifyContent: 'center' }}
-                        >
-                          {item.rate}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
