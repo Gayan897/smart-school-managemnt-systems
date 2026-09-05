@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { AttendanceRecord, LeaveRequest, TermMark, SchoolClass, Student } from '../data/models';
+import type { AttendanceRecord, LeaveRequest, TermMark, SchoolClass, Student, AppLanguage } from '../data/models';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -321,7 +321,7 @@ interface PrincipalReportsProps {
   setSelectedTerm: (v: number) => void;
   expandedClass: string | null;
   setExpandedClass: (v: string | null) => void;
-  language: string;
+  language: AppLanguage;
   schoolName?: string;
   schoolCensusCode?: string;
   principalName?: string;
@@ -563,7 +563,7 @@ function PrincipalReportsView({
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
                     <YAxis domain={[0, 100]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} unit="%" />
-                    <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px' }} formatter={(val: number) => [`${val}%`, 'Attendance Rate']} />
+                    <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px' }} formatter={(val: any) => [`${val}%`, 'Attendance Rate']} />
                     <Bar dataKey="rate" name="Attendance Rate" radius={[4, 4, 0, 0]}>
                       {classAttendance.map((entry, idx) => <Cell key={idx} fill={entry.rate >= 90 ? '#10b981' : entry.rate >= 75 ? '#f59e0b' : '#ef4444'} />)}
                     </Bar>

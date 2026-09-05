@@ -107,8 +107,8 @@ const strings: Translations = {
   prevWeek: { english: 'Prev Week', sinhala: 'පසුගිය සතිය', tamil: 'முந்தைய வாரம்' },
   nextWeek: { english: 'Next Week', sinhala: 'ඊළඟ සතිය', tamil: 'அடுத்த வாரம்' },
   studentRosterBreakdown: { english: 'Student Attendance Breakdown', sinhala: 'සිසු පැමිණීම් විග්‍රහය', tamil: 'மாணவர் வருகை விவரம்' },
-  criticalRisk: { english: 'Critical Risk (<50%)', sinhala: 'අතිශය අවදානම් (<50%)', tamil: 'மிக ஆபத்து (<50%)' },
-  atRisk: { english: 'At Risk (50–74%)', sinhala: 'අවදානම් (50–74%)', tamil: 'ஆபத்தில் (50–74%)' },
+  criticalRiskThreshold: { english: 'Critical Risk (<50%)', sinhala: 'අතිශය අවදානම් (<50%)', tamil: 'மிக ஆபத்து (<50%)' },
+  atRiskThreshold: { english: 'At Risk (50–74%)', sinhala: 'අවදානම් (50–74%)', tamil: 'ஆபத்தில் (50–74%)' },
 
   // Leave
   applyLeave: { english: 'Apply for Leave', sinhala: 'නිවාඩු ඉල්ලීමක් කරන්න', tamil: 'விடுப்பு விண்ணப்பிக்க' },
