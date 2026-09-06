@@ -1,16 +1,18 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   Save, Eye, Trophy, Award, GraduationCap, Sparkles, Check, BookOpen,
-  UserCheck, Layers, FileSpreadsheet, BarChart2, RefreshCw, AlertCircle
+  UserCheck, Layers, FileSpreadsheet, BarChart2, RefreshCw, AlertCircle,
+  FileDown, Download, Medal, Calendar, Search, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { Student, SchoolClass, TermMark } from '../data/models';
+import type { Student, SchoolClass, TermMark, AttendanceRecord } from '../data/models';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import StudentProfileModal from '../components/StudentProfileModal';
 import OfflineBanner from '../components/OfflineBanner';
 import { useNetworkStatus } from '../utils/useNetworkStatus';
+import { exportStudentReportCardPdf } from '../utils/reportsPdf';
 
 export interface SubjectOption {
   id: string;
@@ -55,6 +57,17 @@ export const SRI_LANKA_SUBJECTS: SubjectOption[] = [
 
 const TERMS = [1, 2, 3];
 
+export interface StudentRankingItem {
+  student: Student;
+  rank: number | null;
+  totalMarks: number;
+  subjectsCount: number;
+  avgMarks: number;
+  grade: string;
+  marksBySubject: Record<string, number>;
+  hasMarks: boolean;
+}
+
 export default function PerformanceScreen() {
   const { user, language } = useAuth();
   const isPrincipal = user?.role === 'principal' || user?.role === 'zonal_admin';
@@ -66,6 +79,7 @@ export default function PerformanceScreen() {
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [marks, setMarks] = useState<TermMark[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
   const [selectedTerm, setSelectedTerm] = useState(1);
@@ -77,6 +91,13 @@ export default function PerformanceScreen() {
   // Teacher Mark Entry State (Student-Wise)
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [studentMarksheetInput, setStudentMarksheetInput] = useState<Record<string, string>>({});
+
+  // Search filter for rankings & marksheet table
+  const [rankingsSearch, setRankingsSearch] = useState('');
+
+  // Report card PDF downloading state
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [batchDownloading, setBatchDownloading] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -120,9 +141,18 @@ export default function PerformanceScreen() {
       setMarks(m);
     });
 
+    // Real-time attendance listener for student report cards
+    const unsubAttendance = databaseService.subscribeToAttendance(
+      (att) => {
+        setAttendance(att);
+      },
+      (err) => console.error('Attendance subscription error:', err)
+    );
+
     return () => {
       unsubStudents();
       unsubMarks();
+      unsubAttendance();
     };
   }, [isPrincipal, user]);
 
@@ -254,6 +284,177 @@ export default function PerformanceScreen() {
     const grade = avg >= 75 ? 'A' : avg >= 65 ? 'B' : avg >= 55 ? 'C' : avg >= 35 ? 'S' : count > 0 ? 'F' : '—';
     return { total, count, avg, grade };
   }, [studentMarksheetInput]);
+
+  // ─── Class-wise Rankings & Places (1st, 2nd, 3rd and all other places) ───
+  const classRankings = useMemo<StudentRankingItem[]>(() => {
+    if (students.length === 0) return [];
+
+    const computed = students.map(s => {
+      const stuMarks = marks.filter(m => m.studentId === s.id && m.term === selectedTerm);
+      const marksBySubject: Record<string, number> = {};
+      stuMarks.forEach(m => {
+        marksBySubject[m.subject] = m.marks;
+      });
+
+      const totalMarks = stuMarks.reduce((sum, m) => sum + m.marks, 0);
+      const subjectsCount = stuMarks.length;
+      const avgMarks = subjectsCount > 0 ? Math.round((totalMarks / subjectsCount) * 10) / 10 : 0;
+      const grade = avgMarks >= 75 ? 'A' : avgMarks >= 65 ? 'B' : avgMarks >= 55 ? 'C' : avgMarks >= 35 ? 'S' : subjectsCount > 0 ? 'F' : '—';
+
+      return {
+        student: s,
+        totalMarks,
+        subjectsCount,
+        avgMarks,
+        grade,
+        marksBySubject,
+        hasMarks: subjectsCount > 0,
+      };
+    });
+
+    // Sort students with marks: higher average first, then higher total marks, then name
+    const withMarks = computed
+      .filter(c => c.hasMarks)
+      .sort((a, b) => {
+        if (b.avgMarks !== a.avgMarks) return b.avgMarks - a.avgMarks;
+        if (b.totalMarks !== a.totalMarks) return b.totalMarks - a.totalMarks;
+        return a.student.name.localeCompare(b.student.name);
+      });
+
+    // Assign places (1st, 2nd, 3rd, 4th...) with clean tie support
+    let currentRank = 1;
+    const rankedWithMarks: StudentRankingItem[] = withMarks.map((item, index) => {
+      if (index > 0) {
+        const prev = withMarks[index - 1];
+        if (item.avgMarks === prev.avgMarks && item.totalMarks === prev.totalMarks) {
+          return { ...item, rank: currentRank };
+        } else {
+          currentRank = index + 1;
+          return { ...item, rank: currentRank };
+        }
+      }
+      return { ...item, rank: 1 };
+    });
+
+    // Students with no marks entered yet are listed at the bottom as unranked
+    const withoutMarks: StudentRankingItem[] = computed
+      .filter(c => !c.hasMarks)
+      .map(item => ({ ...item, rank: null }));
+
+    return [...rankedWithMarks, ...withoutMarks];
+  }, [students, marks, selectedTerm]);
+
+  // Top 3 Best Performers of the class
+  const firstPlace = useMemo(() => classRankings.find(s => s.rank === 1) || null, [classRankings]);
+  const secondPlace = useMemo(() => classRankings.find(s => s.rank === 2) || null, [classRankings]);
+  const thirdPlace = useMemo(() => classRankings.find(s => s.rank === 3) || null, [classRankings]);
+
+  // Current selected student's ranking item (for student-wise tab)
+  const selectedStudentRanking = useMemo(() => {
+    return classRankings.find(r => r.student.id === selectedStudentId) || null;
+  }, [classRankings, selectedStudentId]);
+
+  // Filtered rankings by search query
+  const filteredRankings = useMemo(() => {
+    if (!rankingsSearch.trim()) return classRankings;
+    const q = rankingsSearch.toLowerCase().trim();
+    return classRankings.filter(r =>
+      r.student.name.toLowerCase().includes(q) ||
+      (r.student.admissionNumber && r.student.admissionNumber.toLowerCase().includes(q)) ||
+      r.student.id.toLowerCase().includes(q)
+    );
+  }, [classRankings, rankingsSearch]);
+
+  // ─── Download Student Term Report Card ───
+  function handleDownloadReportCard(rankingItem: StudentRankingItem) {
+    const stu = rankingItem.student;
+    setDownloadingId(stu.id);
+
+    try {
+      const stuMarks = marks.filter(m => m.studentId === stu.id && m.term === selectedTerm);
+
+      // Student attendance metrics
+      const stuAtt = attendance.filter(a => a.studentId === stu.id);
+      const totalDays = stuAtt.length;
+      const presentDays = stuAtt.filter(a => a.status === 'present' || a.status === 'late').length;
+      const attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : undefined;
+
+      // Subject breakdown with class averages
+      const subjectsList = stuMarks.map(m => {
+        const subObj = SRI_LANKA_SUBJECTS.find(s => s.id === m.subject);
+        const classSubMarks = marks.filter(
+          mk => students.some(s => s.id === mk.studentId) && mk.subject === m.subject && mk.term === selectedTerm
+        );
+        const classAvg = classSubMarks.length > 0
+          ? Math.round((classSubMarks.reduce((acc, c) => acc + c.marks, 0) / classSubMarks.length) * 10) / 10
+          : undefined;
+
+        const gr = m.marks >= 75 ? 'A' : m.marks >= 65 ? 'B' : m.marks >= 55 ? 'C' : m.marks >= 35 ? 'S' : 'F';
+
+        return {
+          subjectId: m.subject,
+          subjectName: subObj ? subObj.nameEn : m.subject,
+          marks: m.marks,
+          maxMarks: m.maxMarks || 100,
+          grade: gr,
+          classAverage: classAvg,
+          category: subObj?.category,
+        };
+      });
+
+      exportStudentReportCardPdf({
+        schoolName: user?.schoolName || 'Government National School',
+        schoolCensusCode: user?.schoolCensusCode,
+        principalName: currentClassObj?.homeroomTeacherName || user?.name || 'Principal',
+        teacherName: currentClassObj?.homeroomTeacherName || (user?.role === 'teacher' ? user.name : 'Homeroom Teacher'),
+        academicYear: new Date().getFullYear(),
+        term: selectedTerm,
+        student: {
+          id: stu.id,
+          name: stu.name,
+          admissionNumber: stu.admissionNumber,
+          grade: currentClassObj ? currentClassObj.grade : stu.grade,
+          section: currentClassObj ? currentClassObj.section : '',
+          stream: currentClassObj?.stream,
+        },
+        rank: rankingItem.rank,
+        totalStudentsInClass: students.length,
+        subjects: subjectsList,
+        totalMarks: rankingItem.totalMarks,
+        maxPossibleMarks: Math.max(stuMarks.length * 100, 100),
+        averageMarks: rankingItem.avgMarks,
+        overallGrade: rankingItem.grade,
+        attendanceRate,
+        attendancePresent: presentDays,
+        attendanceTotal: totalDays,
+      });
+
+      setSuccessMsg(`📄 Official Report Card downloaded for ${stu.name} (Term ${selectedTerm})!`);
+      setTimeout(() => setSuccessMsg(''), 3500);
+    } catch (err) {
+      console.error('Failed to generate report card:', err);
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
+  // ─── Batch Download All Report Cards for the Class ───
+  async function handleBatchDownloadReportCards() {
+    const studentsWithMarks = classRankings.filter(s => s.subjectsCount > 0);
+    if (studentsWithMarks.length === 0) return;
+
+    setBatchDownloading(true);
+    try {
+      for (const item of studentsWithMarks) {
+        handleDownloadReportCard(item);
+        await new Promise(res => setTimeout(res, 280));
+      }
+      setSuccessMsg(`✅ Generated ${studentsWithMarks.length} student report cards for Term ${selectedTerm}!`);
+      setTimeout(() => setSuccessMsg(''), 4500);
+    } finally {
+      setBatchDownloading(false);
+    }
+  }
 
   // ─── Principal: Class-wise Performance Aggregations ───
   const classWisePerformance = useMemo(() => {
@@ -516,19 +717,48 @@ export default function PerformanceScreen() {
             </div>
           </div>
 
-          {/* Term Selector */}
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label" style={{ marginBottom: '8px' }}>Academic Term</label>
-            <select
-              className="form-control"
-              value={selectedTerm}
-              onChange={e => setSelectedTerm(Number(e.target.value))}
-              style={{ minHeight: '44px', fontWeight: 600 }}
-            >
-              {TERMS.map(tm => (
-                <option key={tm} value={tm}>Term {tm} Examination</option>
-              ))}
-            </select>
+          {/* Term Selector (1st Term, 2nd Term, 3rd Term) */}
+          <div>
+            <label className="form-label" style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Calendar size={14} style={{ color: 'var(--primary)' }} /> Select Academic Term
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {TERMS.map(tm => {
+                const isSelected = selectedTerm === tm;
+                const label = tm === 1 ? '1st Term' : tm === 2 ? '2nd Term' : '3rd Term';
+                return (
+                  <button
+                    key={tm}
+                    type="button"
+                    onClick={() => setSelectedTerm(tm)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                      background: isSelected
+                        ? 'linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(99,102,241,0.12) 100%)'
+                        : 'var(--bg-secondary)',
+                      color: isSelected ? 'var(--primary)' : 'var(--text-secondary)',
+                      fontWeight: isSelected ? 800 : 600,
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '2px',
+                      boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.18)' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span>{label}</span>
+                    <span style={{ fontSize: '10px', opacity: isSelected ? 1 : 0.65, fontWeight: isSelected ? 700 : 400 }}>
+                      {isSelected ? '● Active' : 'Select'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -552,9 +782,10 @@ export default function PerformanceScreen() {
         <button
           className={`tab ${activeTab === 'class_overview' ? 'active' : ''}`}
           onClick={() => setActiveTab('class_overview')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: activeTab === 'class_overview' ? 700 : 500 }}
         >
-          <FileSpreadsheet size={15} /> Class Performance Marksheet
+          <Trophy size={15} style={{ color: activeTab === 'class_overview' ? '#f59e0b' : 'inherit' }} />
+          Class Rankings & Report Cards
         </button>
         <button
           className={`tab ${activeTab === 'chart' ? 'active' : ''}`}
@@ -618,10 +849,11 @@ export default function PerformanceScreen() {
                   <tr>
                     <th>#</th>
                     <th>{t('student', language)}</th>
+                    <th>Class Standing</th>
                     <th>Admission #</th>
                     <th style={{ width: '150px' }}>Marks (0 - 100)</th>
                     <th style={{ textAlign: 'center', width: '90px' }}>Grade</th>
-                    <th style={{ textAlign: 'center' }}>Quick Action</th>
+                    <th style={{ textAlign: 'center' }}>Quick Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -630,6 +862,7 @@ export default function PerformanceScreen() {
                     const hasVal = markInput[s.id] !== '' && markInput[s.id] !== undefined;
                     const grade = val >= 75 ? 'A' : val >= 65 ? 'B' : val >= 55 ? 'C' : val >= 35 ? 'S' : 'F';
                     const gradeColor = grade === 'A' ? 'var(--success)' : grade === 'B' ? 'var(--primary-light)' : grade === 'C' ? 'var(--info)' : grade === 'S' ? 'var(--warning)' : 'var(--danger)';
+                    const rankItem = classRankings.find(r => r.student.id === s.id);
 
                     return (
                       <tr key={s.id}>
@@ -653,6 +886,27 @@ export default function PerformanceScreen() {
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {s.id}</div>
                           </button>
+                        </td>
+                        <td>
+                          {rankItem?.rank === 1 ? (
+                            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.18)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.4)', fontWeight: 800 }}>
+                              🥇 1st Place
+                            </span>
+                          ) : rankItem?.rank === 2 ? (
+                            <span className="badge" style={{ background: 'rgba(148, 163, 184, 0.2)', color: '#475569', border: '1px solid rgba(148, 163, 184, 0.4)', fontWeight: 800 }}>
+                              🥈 2nd Place
+                            </span>
+                          ) : rankItem?.rank === 3 ? (
+                            <span className="badge" style={{ background: 'rgba(217, 119, 6, 0.18)', color: '#9a3412', border: '1px solid rgba(217, 119, 6, 0.4)', fontWeight: 800 }}>
+                              🥉 3rd Place
+                            </span>
+                          ) : rankItem?.rank ? (
+                            <span className="badge badge-muted" style={{ fontWeight: 700 }}>
+                              #{rankItem.rank} in Class
+                            </span>
+                          ) : (
+                            <span className="badge badge-muted" style={{ opacity: 0.6 }}>—</span>
+                          )}
                         </td>
                         <td>
                           <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontWeight: 700 }}>
@@ -681,17 +935,31 @@ export default function PerformanceScreen() {
                           )}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            style={{ fontSize: '11px', padding: '3px 8px' }}
-                            onClick={() => {
-                              setSelectedStudentId(s.id);
-                              setActiveTab('by_student');
-                            }}
-                          >
-                            👤 Full Marksheet
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ fontSize: '11px', padding: '3px 8px' }}
+                              onClick={() => {
+                                setSelectedStudentId(s.id);
+                                setActiveTab('by_student');
+                              }}
+                              title="Open student marksheet"
+                            >
+                              👤 Marksheet
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ fontSize: '11px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => rankItem && handleDownloadReportCard(rankItem)}
+                              disabled={!rankItem || rankItem.subjectsCount === 0 || downloadingId === s.id}
+                              title="Download Term Report Card (PDF)"
+                            >
+                              <FileDown size={12} />
+                              {downloadingId === s.id ? '...' : 'PDF'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -736,8 +1004,20 @@ export default function PerformanceScreen() {
                 <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>
                   Admission #: <code style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)' }}>{currentStudentObj.admissionNumber || currentStudentObj.id}</code>
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px' }}>
                   Class: {currentStudentObj.classRoom} (Grade {currentStudentObj.grade})
+                </div>
+
+                {/* Live Class Standing Badge */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
+                  <Trophy size={15} style={{ color: selectedStudentRanking?.rank === 1 ? '#f59e0b' : selectedStudentRanking?.rank === 2 ? '#64748b' : selectedStudentRanking?.rank === 3 ? '#b45309' : 'var(--primary)' }} />
+                  <span style={{ fontWeight: 700, fontSize: '12px' }}>
+                    {selectedStudentRanking?.rank === 1 ? '🥇 1st Place (Class Champion)'
+                      : selectedStudentRanking?.rank === 2 ? '🥈 2nd Place (Runner-Up)'
+                      : selectedStudentRanking?.rank === 3 ? '🥉 3rd Place'
+                      : selectedStudentRanking?.rank ? `#${selectedStudentRanking.rank} in Class (${selectedStudentRanking.rank} of ${students.length})`
+                      : 'Unranked (Awaiting marks)'}
+                  </span>
                 </div>
               </div>
             )}
@@ -763,26 +1043,61 @@ export default function PerformanceScreen() {
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Overall Grade</div>
                 </div>
               </div>
+
+              {/* One-Click Student Report Card Download Button */}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => selectedStudentRanking && handleDownloadReportCard(selectedStudentRanking)}
+                disabled={!selectedStudentRanking || selectedStudentRanking.subjectsCount === 0 || downloadingId === selectedStudentId}
+                style={{
+                  width: '100%',
+                  marginTop: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  padding: '10px 14px',
+                }}
+              >
+                <FileDown size={16} />
+                {downloadingId === selectedStudentId ? 'Generating PDF Report Card...' : `Download Term ${selectedTerm} Report Card`}
+              </button>
             </div>
           </div>
 
           {/* Marksheet Entry Form */}
           <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '10px' }}>
               <div>
                 <h3 className="card-title" style={{ margin: 0 }}>Subject Marks Entry</h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
                   Enter marks (0-100) for Core and Elective subjects
                 </p>
               </div>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleSaveStudentMarksheet}
-                disabled={saving || !selectedStudentId}
-              >
-                {saving ? <span className="spinner" /> : <Save size={14} />}
-                {saved ? '✓ Saved!' : 'Save Marksheet'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => selectedStudentRanking && handleDownloadReportCard(selectedStudentRanking)}
+                  disabled={!selectedStudentRanking || selectedStudentRanking.subjectsCount === 0 || downloadingId === selectedStudentId}
+                  title="Download Report Card"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <FileDown size={14} />
+                  Report Card
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleSaveStudentMarksheet}
+                  disabled={saving || !selectedStudentId}
+                >
+                  {saving ? <span className="spinner" /> : <Save size={14} />}
+                  {saved ? '✓ Saved!' : 'Save Marksheet'}
+                </button>
+              </div>
             </div>
 
             {/* Core Subjects Section */}
@@ -888,66 +1203,566 @@ export default function PerformanceScreen() {
         </div>
       )}
 
-      {/* ─── TAB 3: CLASS MARKSHEET SPREADSHEET OVERVIEW ─── */}
+      {/* ─── TAB 3: CLASS RANKINGS, BEST PERFORMERS & REPORT CARDS ─── */}
       {activeTab === 'class_overview' && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Class {selectedClass} Marksheet (Term {selectedTerm})</h3>
-          </div>
-          {students.length === 0 ? (
-            <div className="empty-state"><p>{t('noStudents', language)}</p></div>
-          ) : (
-            <div className="table-wrapper" style={{ border: 'none', overflowX: 'auto' }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Student</th>
-                    <th>Admission #</th>
-                    {SRI_LANKA_SUBJECTS.slice(0, 8).map(s => (
-                      <th key={s.id} style={{ textAlign: 'center', fontSize: '11px' }}>{s.id}</th>
-                    ))}
-                    <th style={{ textAlign: 'center', fontWeight: 700 }}>Average</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((s, idx) => {
-                    const stuMarks = marks.filter(m => m.studentId === s.id && m.term === selectedTerm);
-                    const avgVal = stuMarks.length > 0
-                      ? Math.round((stuMarks.reduce((sum, m) => sum + m.marks, 0) / stuMarks.length) * 10) / 10
-                      : null;
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+          {/* ── BEST PERFORMERS PODIUM (1st, 2nd, 3rd Places) ── */}
+          <div className="card" style={{ background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%)', border: '1.5px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                  <Trophy size={22} style={{ color: '#f59e0b' }} />
+                  Class Champions & Best Performers — Term {selectedTerm}
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
+                  Top 3 academic places of Class {currentClassObj ? `${currentClassObj.grade}${currentClassObj.section}` : selectedClass} based on Term {selectedTerm} average
+                </p>
+              </div>
 
-                    return (
-                      <tr key={s.id}>
-                        <td style={{ color: 'var(--text-muted)', width: '32px' }}>{idx + 1}</td>
-                        <td style={{ fontWeight: 600 }}>{s.name}</td>
-                        <td>
-                          <span className="badge badge-primary" style={{ fontFamily: 'monospace' }}>
-                            {s.admissionNumber || s.id}
-                          </span>
-                        </td>
-                        {SRI_LANKA_SUBJECTS.slice(0, 8).map(sub => {
-                          const markObj = stuMarks.find(m => m.subject === sub.id);
-                          return (
-                            <td key={sub.id} style={{ textAlign: 'center', fontWeight: markObj ? 600 : 400 }}>
-                              {markObj ? markObj.marks : '—'}
-                            </td>
-                          );
-                        })}
-                        <td style={{ textAlign: 'center', fontWeight: 700 }}>
-                          {avgVal !== null ? (
-                            <span style={{ color: avgVal >= 60 ? 'var(--success)' : 'var(--warning)' }}>
-                              {avgVal}%
-                            </span>
-                          ) : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {classRankings.some(s => s.subjectsCount > 0) && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleBatchDownloadReportCards}
+                  disabled={batchDownloading}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, padding: '8px 14px' }}
+                >
+                  <Download size={14} />
+                  {batchDownloading ? 'Downloading All PDFs...' : `Download All Report Cards (Term ${selectedTerm})`}
+                </button>
+              )}
             </div>
-          )}
+
+            {/* 3 Podium Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+              {/* 🥇 1st Place Card (Gold) */}
+              <div style={{
+                borderRadius: 'var(--radius-lg)',
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(251, 191, 36, 0.05) 100%)',
+                border: '2px solid rgba(245, 158, 11, 0.5)',
+                padding: '18px 20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: '0 6px 20px rgba(245, 158, 11, 0.12)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: '#ffffff',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      letterSpacing: '0.5px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      boxShadow: '0 2px 8px rgba(245, 158, 11, 0.35)',
+                    }}>
+                      🥇 1st Place • Class Champion
+                    </span>
+                    <Trophy size={26} style={{ color: '#f59e0b' }} />
+                  </div>
+
+                  {firstPlace ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProfileStudentId(firstPlace.student.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          color: 'inherit',
+                          display: 'block',
+                          marginBottom: '4px',
+                        }}
+                        title="Click to view full student profile"
+                      >
+                        <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                          {firstPlace.student.name}
+                        </h4>
+                      </button>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', fontFamily: 'monospace' }}>
+                        Adm No: <span style={{ fontWeight: 700, color: '#d97706' }}>{firstPlace.student.admissionNumber || firstPlace.student.id}</span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px', background: 'var(--bg-card)', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: '#d97706' }}>{firstPlace.avgMarks}%</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Average</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: 'var(--text-primary)' }}>{firstPlace.totalMarks}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Total</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: '#10b981' }}>{firstPlace.grade}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Grade</div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <p style={{ margin: 0, fontSize: '13px' }}>Awaiting mark submissions for Term {selectedTerm}</p>
+                    </div>
+                  )}
+                </div>
+
+                {firstPlace && (
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => handleDownloadReportCard(firstPlace)}
+                    disabled={downloadingId === firstPlace.student.id}
+                    style={{
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
+                    }}
+                  >
+                    <FileDown size={14} />
+                    {downloadingId === firstPlace.student.id ? 'Generating...' : 'Download Report Card (PDF)'}
+                  </button>
+                )}
+              </div>
+
+              {/* 🥈 2nd Place Card (Silver) */}
+              <div style={{
+                borderRadius: 'var(--radius-lg)',
+                background: 'linear-gradient(135deg, rgba(148, 163, 184, 0.12) 0%, rgba(203, 213, 225, 0.05) 100%)',
+                border: '2px solid rgba(148, 163, 184, 0.45)',
+                padding: '18px 20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: '0 6px 20px rgba(100, 116, 139, 0.1)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{
+                      background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+                      color: '#ffffff',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      letterSpacing: '0.5px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      boxShadow: '0 2px 8px rgba(100, 116, 139, 0.3)',
+                    }}>
+                      🥈 2nd Place • Runner-Up
+                    </span>
+                    <Medal size={26} style={{ color: '#94a3b8' }} />
+                  </div>
+
+                  {secondPlace ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProfileStudentId(secondPlace.student.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          color: 'inherit',
+                          display: 'block',
+                          marginBottom: '4px',
+                        }}
+                        title="Click to view full student profile"
+                      >
+                        <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                          {secondPlace.student.name}
+                        </h4>
+                      </button>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', fontFamily: 'monospace' }}>
+                        Adm No: <span style={{ fontWeight: 700, color: '#64748b' }}>{secondPlace.student.admissionNumber || secondPlace.student.id}</span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px', background: 'var(--bg-card)', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(148, 163, 184, 0.25)' }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: '#64748b' }}>{secondPlace.avgMarks}%</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Average</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: 'var(--text-primary)' }}>{secondPlace.totalMarks}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Total</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: '#10b981' }}>{secondPlace.grade}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Grade</div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <p style={{ margin: 0, fontSize: '13px' }}>Awaiting mark submissions</p>
+                    </div>
+                  )}
+                </div>
+
+                {secondPlace && (
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => handleDownloadReportCard(secondPlace)}
+                    disabled={downloadingId === secondPlace.student.id}
+                    style={{
+                      background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: '0 2px 8px rgba(100, 116, 139, 0.25)',
+                    }}
+                  >
+                    <FileDown size={14} />
+                    {downloadingId === secondPlace.student.id ? 'Generating...' : 'Download Report Card (PDF)'}
+                  </button>
+                )}
+              </div>
+
+              {/* 🥉 3rd Place Card (Bronze) */}
+              <div style={{
+                borderRadius: 'var(--radius-lg)',
+                background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.1) 0%, rgba(180, 83, 9, 0.04) 100%)',
+                border: '2px solid rgba(217, 119, 6, 0.4)',
+                padding: '18px 20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: '0 6px 20px rgba(217, 119, 6, 0.1)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{
+                      background: 'linear-gradient(135deg, #b45309 0%, #78350f 100%)',
+                      color: '#ffffff',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      letterSpacing: '0.5px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      boxShadow: '0 2px 8px rgba(180, 83, 9, 0.3)',
+                    }}>
+                      🥉 3rd Place
+                    </span>
+                    <Medal size={26} style={{ color: '#b45309' }} />
+                  </div>
+
+                  {thirdPlace ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProfileStudentId(thirdPlace.student.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          color: 'inherit',
+                          display: 'block',
+                          marginBottom: '4px',
+                        }}
+                        title="Click to view full student profile"
+                      >
+                        <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                          {thirdPlace.student.name}
+                        </h4>
+                      </button>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', fontFamily: 'monospace' }}>
+                        Adm No: <span style={{ fontWeight: 700, color: '#b45309' }}>{thirdPlace.student.admissionNumber || thirdPlace.student.id}</span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px', background: 'var(--bg-card)', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(217, 119, 6, 0.25)' }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: '#b45309' }}>{thirdPlace.avgMarks}%</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Average</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: 'var(--text-primary)' }}>{thirdPlace.totalMarks}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Total</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 900, color: '#10b981' }}>{thirdPlace.grade}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Grade</div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <p style={{ margin: 0, fontSize: '13px' }}>Awaiting mark submissions</p>
+                    </div>
+                  )}
+                </div>
+
+                {thirdPlace && (
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => handleDownloadReportCard(thirdPlace)}
+                    disabled={downloadingId === thirdPlace.student.id}
+                    style={{
+                      background: 'linear-gradient(135deg, #b45309 0%, #78350f 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: '0 2px 8px rgba(180, 83, 9, 0.25)',
+                    }}
+                  >
+                    <FileDown size={14} />
+                    {downloadingId === thirdPlace.student.id ? 'Generating...' : 'Download Report Card (PDF)'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── COMPLETE CLASS RANKINGS LEADERBOARD & MARKSHEET ── */}
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '14px', paddingBottom: '14px', borderBottom: '1px solid var(--border-color)' }}>
+              <div>
+                <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Award size={18} style={{ color: 'var(--primary)' }} />
+                  Class {selectedClass} Complete Rankings & Academic Marksheet
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Showing 1st, 2nd, 3rd, and all respective student places for Term {selectedTerm} Examination ({classRankings.filter(s => s.subjectsCount > 0).length} of {students.length} graded)
+                </p>
+              </div>
+
+              {/* Search & Filter Bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '260px' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search student or admission #..."
+                    value={rankingsSearch}
+                    onChange={e => setRankingsSearch(e.target.value)}
+                    style={{ paddingLeft: '32px', fontSize: '13px', height: '36px' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {students.length === 0 ? (
+              <div className="empty-state"><p>{t('noStudents', language)}</p></div>
+            ) : filteredRankings.length === 0 ? (
+              <div className="empty-state" style={{ padding: '30px 20px', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-muted)' }}>No student matched "{rankingsSearch}"</p>
+              </div>
+            ) : (
+              <div className="table-wrapper" style={{ border: 'none', overflowX: 'auto' }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'center', width: '90px' }}>Class Place</th>
+                      <th>Student Name</th>
+                      <th>Admission #</th>
+                      {SRI_LANKA_SUBJECTS.slice(0, 6).map(s => (
+                        <th key={s.id} style={{ textAlign: 'center', fontSize: '11px' }}>{s.id}</th>
+                      ))}
+                      <th style={{ textAlign: 'center', width: '70px' }}>Subjects</th>
+                      <th style={{ textAlign: 'center', width: '80px', fontWeight: 700 }}>Total</th>
+                      <th style={{ textAlign: 'center', width: '85px', fontWeight: 700 }}>Average</th>
+                      <th style={{ textAlign: 'center', width: '60px' }}>Grade</th>
+                      <th style={{ textAlign: 'center', width: '160px' }}>Report Card Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRankings.map((item) => {
+                      const s = item.student;
+                      const hasMarks = item.subjectsCount > 0;
+                      const rank = item.rank;
+
+                      return (
+                        <tr key={s.id} style={{ background: rank === 1 ? 'rgba(245, 158, 11, 0.04)' : rank === 2 ? 'rgba(148, 163, 184, 0.04)' : rank === 3 ? 'rgba(217, 119, 6, 0.04)' : undefined }}>
+                          {/* Class Standing / Place Badge */}
+                          <td style={{ textAlign: 'center' }}>
+                            {rank === 1 ? (
+                              <span className="badge" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#ffffff', fontWeight: 900, padding: '4px 8px', fontSize: '11px', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.3)' }}>
+                                🥇 1st
+                              </span>
+                            ) : rank === 2 ? (
+                              <span className="badge" style={{ background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)', color: '#ffffff', fontWeight: 900, padding: '4px 8px', fontSize: '11px', boxShadow: '0 2px 6px rgba(100, 116, 139, 0.3)' }}>
+                                🥈 2nd
+                              </span>
+                            ) : rank === 3 ? (
+                              <span className="badge" style={{ background: 'linear-gradient(135deg, #b45309 0%, #78350f 100%)', color: '#ffffff', fontWeight: 900, padding: '4px 8px', fontSize: '11px', boxShadow: '0 2px 6px rgba(180, 83, 9, 0.3)' }}>
+                                🥉 3rd
+                              </span>
+                            ) : rank !== null ? (
+                              <span className="badge badge-muted" style={{ fontWeight: 800, minWidth: '42px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
+                                #{rank}
+                              </span>
+                            ) : (
+                              <span className="badge badge-muted" style={{ opacity: 0.5 }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Student Name */}
+                          <td>
+                            <button
+                              type="button"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                color: 'inherit',
+                              }}
+                              onClick={() => setSelectedProfileStudentId(s.id)}
+                              title="Click to view full student profile"
+                            >
+                              <div style={{ fontWeight: 600, color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                                {s.name}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {s.id}</div>
+                            </button>
+                          </td>
+
+                          {/* Admission Number */}
+                          <td>
+                            <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                              {s.admissionNumber || s.id}
+                            </span>
+                          </td>
+
+                          {/* 6 Core Subjects Marks Columns */}
+                          {SRI_LANKA_SUBJECTS.slice(0, 6).map(sub => {
+                            const subMark = item.marksBySubject[sub.id];
+                            return (
+                              <td key={sub.id} style={{ textAlign: 'center', fontWeight: subMark !== undefined ? 600 : 400 }}>
+                                {subMark !== undefined ? (
+                                  <span style={{ color: subMark >= 75 ? 'var(--success)' : subMark >= 50 ? 'var(--text-primary)' : 'var(--danger)' }}>
+                                    {subMark}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)' }}>—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+
+                          {/* Subjects Count */}
+                          <td style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {item.subjectsCount > 0 ? `${item.subjectsCount} subs` : '—'}
+                          </td>
+
+                          {/* Total Marks */}
+                          <td style={{ textAlign: 'center', fontWeight: 700 }}>
+                            {hasMarks ? item.totalMarks : '—'}
+                          </td>
+
+                          {/* Average Marks */}
+                          <td style={{ textAlign: 'center', fontWeight: 800 }}>
+                            {hasMarks ? (
+                              <span style={{ color: item.avgMarks >= 75 ? 'var(--success)' : item.avgMarks >= 60 ? 'var(--primary-light)' : item.avgMarks >= 35 ? 'var(--warning)' : 'var(--danger)' }}>
+                                {item.avgMarks}%
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Overall Grade */}
+                          <td style={{ textAlign: 'center' }}>
+                            {hasMarks ? (
+                              <span className={`badge ${item.grade === 'A' ? 'badge-success' : item.grade === 'B' ? 'badge-primary' : item.grade === 'C' ? 'badge-info' : item.grade === 'S' ? 'badge-warning' : 'badge-danger'}`} style={{ fontWeight: 800 }}>
+                                {item.grade}
+                              </span>
+                            ) : (
+                              <span className="badge badge-muted">—</span>
+                            )}
+                          </td>
+
+                          {/* Report Card Action Buttons */}
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleDownloadReportCard(item)}
+                                disabled={!hasMarks || downloadingId === s.id}
+                                style={{
+                                  fontSize: '11px',
+                                  padding: '4px 10px',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: hasMarks ? 'rgba(37,99,235,0.1)' : undefined,
+                                  color: hasMarks ? 'var(--primary)' : undefined,
+                                  border: hasMarks ? '1px solid rgba(37,99,235,0.3)' : undefined,
+                                }}
+                                title={hasMarks ? 'Download official report card PDF' : 'Enter marks before downloading report card'}
+                              >
+                                <FileDown size={13} />
+                                {downloadingId === s.id ? 'Generating...' : 'Report Card'}
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setSelectedStudentId(s.id);
+                                  setActiveTab('by_student');
+                                }}
+                                style={{ fontSize: '11px', padding: '4px 8px' }}
+                                title="Edit marksheet for this student"
+                              >
+                                ✏️ Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -810,3 +810,470 @@ export function exportPerformancePdf(options: PerformancePdfOptions): void {
   const fileName = `${sanitizeFilename(school)}_Performance_Report_Term${options.selectedTerm}_${sanitizeFilename(filterLabel)}_${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(fileName);
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Student Term Report Card PDF Generator
+// ═════════════════════════════════════════════════════════════════════════════
+
+export interface StudentReportCardOptions {
+  schoolName?: string;
+  schoolCensusCode?: string;
+  principalName?: string;
+  teacherName?: string;
+  academicYear?: string | number;
+  term: number; // 1 | 2 | 3
+  student: {
+    id: string;
+    name: string;
+    admissionNumber?: string;
+    grade: string | number;
+    section: string;
+    stream?: 'ol' | 'al' | string;
+  };
+  rank?: number | null; // 1 for 1st place, 2 for 2nd place, etc.
+  totalStudentsInClass?: number;
+  subjects: {
+    subjectId: string;
+    subjectName: string;
+    marks: number;
+    maxMarks?: number;
+    grade: string;
+    classAverage?: number;
+    category?: string;
+  }[];
+  totalMarks: number;
+  maxPossibleMarks: number;
+  averageMarks: number;
+  overallGrade: string;
+  attendanceRate?: number;
+  attendancePresent?: number;
+  attendanceTotal?: number;
+}
+
+/**
+ * Generates and downloads an Official Sri Lankan School Term Report Card (PDF)
+ * formatted to Sri Lanka Ministry of Education academic progress reporting standards.
+ */
+export function exportStudentReportCardPdf(options: StudentReportCardOptions): void {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const school = options.schoolName || 'Government National School';
+  const census = options.schoolCensusCode ? `MoE Census: ${options.schoolCensusCode}` : '';
+  const principal = options.principalName || 'Principal';
+  const teacher = options.teacherName || 'Homeroom Teacher';
+  const year = options.academicYear || new Date().getFullYear();
+  const termLabel = options.term === 1 ? '1st Term' : options.term === 2 ? '2nd Term' : '3rd Term';
+
+  // ── Header Banner ────────────────────────────────────────────────────────
+  doc.setFillColor(15, 23, 42); // Deep Navy #0f172a
+  doc.rect(0, 0, pageWidth, 28, 'F');
+
+  // Accent line
+  doc.setFillColor(13, 148, 136); // Teal Accent #0d9488
+  doc.rect(0, 28, pageWidth, 2.5, 'F');
+
+  // School Title
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text(school.toUpperCase(), margin, 11);
+
+  // Subtitle
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184); // Slate 400
+  const subHeader = census
+    ? `MINISTRY OF EDUCATION — SRI LANKA  |  ${census}  |  ACADEMIC GOVERNANCE`
+    : 'MINISTRY OF EDUCATION — SRI LANKA  |  DEPARTMENT OF EXAMINATIONS';
+  doc.text(subHeader, margin, 17);
+
+  // Document Badge (Right Side)
+  doc.setFillColor(30, 41, 59);
+  doc.roundedRect(pageWidth - margin - 58, 6, 58, 16, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(56, 189, 248); // Sky blue
+  doc.text(`${termLabel.toUpperCase()} REPORT CARD`, pageWidth - margin - 29, 12, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text(`ACADEMIC YEAR ${year}`, pageWidth - margin - 29, 18, { align: 'center' });
+
+  let curY = 36;
+
+  // ── Student Details Card ─────────────────────────────────────────────────
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, curY, contentWidth, 24, 2, 2, 'FD');
+
+  // Left Column: Student Name & Admission Number
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text(options.student.name, margin + 5, curY + 7);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  const admNo = options.student.admissionNumber || options.student.id;
+  doc.text(`Admission No: `, margin + 5, curY + 13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(2, 132, 199);
+  doc.text(admNo, margin + 28, curY + 13);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Student ID: ${options.student.id}`, margin + 5, curY + 19);
+
+  // Middle Column: Class & Stream
+  const midX = margin + (contentWidth * 0.44);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Class / Section:', midX, curY + 7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(`Grade ${options.student.grade}${options.student.section}`, midX + 24, curY + 7);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text('Stream:', midX, curY + 13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(options.student.stream === 'al' ? 'Advanced Level (G.C.E. A/L)' : 'Ordinary Level (G.C.E. O/L)', midX + 14, curY + 13);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Class Teacher: ${teacher}`, midX, curY + 19);
+
+  // Right Column: Date of Issue
+  const rightX = margin + (contentWidth * 0.82);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Date of Issue:', rightX, curY + 7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }), rightX, curY + 13);
+
+  curY += 28;
+
+  // ── Summary KPI Cards ────────────────────────────────────────────────────
+  const cardWidth = (contentWidth - 12) / 4;
+  const cardHeight = 20;
+
+  // Compute Rank Display
+  let rankText = '—';
+  let rankSub = 'Class Standing';
+  let rankColor = [2, 132, 199];
+
+  if (options.rank !== undefined && options.rank !== null && options.rank > 0) {
+    if (options.rank === 1) {
+      rankText = '1st Place';
+      rankSub = 'Class Champion';
+      rankColor = [217, 119, 6]; // Gold / Amber
+    } else if (options.rank === 2) {
+      rankText = '2nd Place';
+      rankSub = 'Runner Up';
+      rankColor = [71, 85, 105]; // Silver
+    } else if (options.rank === 3) {
+      rankText = '3rd Place';
+      rankSub = '3rd in Class';
+      rankColor = [180, 83, 9]; // Bronze
+    } else {
+      rankText = `${options.rank}${options.rank === 1 ? 'st' : options.rank === 2 ? 'nd' : options.rank === 3 ? 'rd' : 'th'} Place`;
+      rankSub = options.totalStudentsInClass ? `Rank ${options.rank} of ${options.totalStudentsInClass}` : 'Class Standing';
+      rankColor = [2, 132, 199];
+    }
+  }
+
+  const kpis = [
+    {
+      label: rankSub,
+      value: rankText,
+      color: rankColor,
+      bg: options.rank === 1 ? [254, 243, 199] : [248, 250, 252],
+    },
+    {
+      label: 'Average Score',
+      value: `${options.averageMarks}%`,
+      color: options.averageMarks >= 75 ? [16, 185, 129] : options.averageMarks >= 60 ? [2, 132, 199] : options.averageMarks >= 35 ? [245, 158, 11] : [239, 68, 68],
+      bg: [248, 250, 252],
+    },
+    {
+      label: 'Total Marks',
+      value: `${options.totalMarks} / ${options.maxPossibleMarks}`,
+      color: [13, 148, 136],
+      bg: [248, 250, 252],
+    },
+    {
+      label: 'Overall Grade',
+      value: options.overallGrade ? `Grade ${options.overallGrade}` : '—',
+      color: options.overallGrade === 'A' ? [16, 185, 129] : options.overallGrade === 'B' ? [2, 132, 199] : options.overallGrade === 'C' ? [6, 182, 212] : options.overallGrade === 'S' ? [245, 158, 11] : [239, 68, 68],
+      bg: [248, 250, 252],
+    },
+  ];
+
+  kpis.forEach((kpi, idx) => {
+    const cardX = margin + idx * (cardWidth + 4);
+    doc.setFillColor(kpi.bg[0], kpi.bg[1], kpi.bg[2]);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(cardX, curY, cardWidth, cardHeight, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+    doc.text(kpi.value, cardX + cardWidth / 2, curY + 8.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(kpi.label, cardX + cardWidth / 2, curY + 15, { align: 'center' });
+  });
+
+  curY += cardHeight + 7;
+
+  // ── Subject Marks autoTable ──────────────────────────────────────────────
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`Academic Performance Marksheet — ${termLabel}`, margin, curY);
+
+  if (options.attendanceRate !== undefined) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    const attStr = options.attendancePresent !== undefined && options.attendanceTotal !== undefined
+      ? `Term Attendance: ${options.attendanceRate}% (${options.attendancePresent} of ${options.attendanceTotal} days present)`
+      : `Term Attendance: ${options.attendanceRate}%`;
+    doc.text(attStr, pageWidth - margin, curY, { align: 'right' });
+  }
+
+  curY += 3;
+
+  const tableHead = [['#', 'Subject Name', 'Max', 'Marks (100)', 'Grade', 'Class Avg', 'Performance Remarks']];
+
+  const tableBody = options.subjects.map((s, i) => {
+    const max = s.maxMarks || 100;
+    const gradeDesc = s.grade === 'A'
+      ? 'Distinction Pass (75-100)'
+      : s.grade === 'B'
+      ? 'Very Good Pass (65-74)'
+      : s.grade === 'C'
+      ? 'Credit Pass (55-64)'
+      : s.grade === 'S'
+      ? 'Ordinary Pass (35-54)'
+      : 'Needs Remediation (<35)';
+
+    const avgStr = s.classAverage !== undefined ? `${s.classAverage}` : '—';
+
+    return [
+      (i + 1).toString(),
+      s.subjectName,
+      max.toString(),
+      s.marks.toString(),
+      s.grade,
+      avgStr,
+      gradeDesc,
+    ];
+  });
+
+  // Append Total / Average Summary Row
+  tableBody.push([
+    '',
+    'Term Total & Overall Average',
+    options.maxPossibleMarks.toString(),
+    `${options.totalMarks} (${options.averageMarks}%)`,
+    options.overallGrade,
+    '—',
+    options.averageMarks >= 75
+      ? 'Outstanding Academic Achievement'
+      : options.averageMarks >= 65
+      ? 'Commendable Academic Performance'
+      : options.averageMarks >= 50
+      ? 'Satisfactory Academic Standing'
+      : 'Special Academic Focus Required',
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: tableHead,
+    body: tableBody,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center',
+    },
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 2.2,
+      textColor: [30, 41, 59],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.1,
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { halign: 'left', cellWidth: 54, fontStyle: 'bold' },
+      2: { halign: 'center', cellWidth: 12 },
+      3: { halign: 'center', cellWidth: 24, fontStyle: 'bold' },
+      4: { halign: 'center', cellWidth: 16, fontStyle: 'bold' },
+      5: { halign: 'center', cellWidth: 18 },
+      6: { halign: 'left', cellWidth: 'auto' },
+    },
+    didParseCell: (data) => {
+      // Highlight total row
+      if (data.section === 'body' && data.row.index === tableBody.length - 1) {
+        data.cell.styles.fillColor = [241, 245, 249];
+        data.cell.styles.fontStyle = 'bold';
+        if (data.column.index === 3 || data.column.index === 4) {
+          data.cell.styles.textColor = [2, 132, 199];
+        }
+      } else if (data.section === 'body' && data.column.index === 4) {
+        // Color-code grade letters
+        const g = String(data.cell.raw);
+        if (g === 'A') data.cell.styles.textColor = [16, 185, 129];
+        else if (g === 'B') data.cell.styles.textColor = [2, 132, 199];
+        else if (g === 'C') data.cell.styles.textColor = [6, 182, 212];
+        else if (g === 'S') data.cell.styles.textColor = [217, 119, 6];
+        else if (g === 'F') data.cell.styles.textColor = [239, 68, 68];
+      }
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  const lastTableY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : curY + 60;
+  let signY = lastTableY + 6;
+
+  // ── Grading Standards Reference ──────────────────────────────────────────
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, signY, contentWidth, 10, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.8);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Sri Lanka National Curriculum Grading Scheme:', margin + 4, signY + 4);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    'A: 75–100 (Distinction)   |   B: 65–74 (Very Good)   |   C: 55–64 (Credit)   |   S: 35–54 (Ordinary Pass)   |   F: 0–34 (Fail / Weak)',
+    margin + 4,
+    signY + 7.5
+  );
+
+  signY += 14;
+
+  // ── Teacher Remarks Box ──────────────────────────────────────────────────
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin, signY, contentWidth, 14, 1.5, 1.5, 'D');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Homeroom Teacher Academic Remarks & Observations:', margin + 4, signY + 4.5);
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7);
+  doc.setTextColor(71, 85, 105);
+
+  let remarkComment = 'Satisfactory overall performance. Continuous effort and focused revision in all core subject areas recommended for upcoming term.';
+  if (options.averageMarks >= 75) {
+    remarkComment = 'Exemplary academic achievement and dedication throughout the term. Demonstrates superior subject comprehension and consistent leadership.';
+  } else if (options.averageMarks >= 65) {
+    remarkComment = 'Very commendable performance. Shows steady progress and positive classroom engagement. Encourage sustained focus to achieve distinctions.';
+  } else if (options.averageMarks < 40) {
+    remarkComment = 'Academic intervention required. Parent-teacher consultation and supervised study sessions strongly recommended to strengthen foundational concepts.';
+  }
+  doc.text(`"${remarkComment}"`, margin + 4, signY + 9.5);
+
+  signY += 18;
+
+  // Ensure sign block doesn't overflow page
+  if (signY + 22 > pageHeight - 12) {
+    doc.addPage();
+    signY = 24;
+  }
+
+  // ── 3 Official Signature Blocks ──────────────────────────────────────────
+  const colWidth = 50;
+
+  // 1. Class Teacher
+  doc.setDrawColor(148, 163, 184);
+  doc.line(margin, signY + 12, margin + colWidth, signY + 12);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Class Teacher Signature', margin, signY + 16);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(teacher, margin, signY + 20);
+
+  // 2. Parent / Guardian
+  const parentX = margin + (contentWidth - colWidth) / 2;
+  doc.line(parentX, signY + 12, parentX + colWidth, signY + 12);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Parent / Guardian Acknowledgment', parentX, signY + 16);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Signature & Date', parentX, signY + 20);
+
+  // 3. Principal & Official Seal
+  const pSignX = pageWidth - margin - colWidth;
+  doc.line(pSignX, signY + 12, pSignX + colWidth, signY + 12);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Principal Certification & Seal', pSignX, signY + 16);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(principal, pSignX, signY + 20);
+
+  // ── Running Page Footers ─────────────────────────────────────────────────
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margin, pageHeight - 9, pageWidth - margin, pageHeight - 9);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `EduNexus SAMS  |  ${school}  |  Official Student Report Card — Term ${options.term}`,
+      margin,
+      pageHeight - 5
+    );
+    doc.text(
+      `Page ${i} of ${totalPages}`,
+      pageWidth - margin,
+      pageHeight - 5,
+      { align: 'right' }
+    );
+  }
+
+  // ── Trigger Download ─────────────────────────────────────────────────────
+  const cleanStudentName = sanitizeFilename(options.student.name);
+  const classCode = sanitizeFilename(`${options.student.grade}${options.student.section}`);
+  const fileName = `ReportCard_${cleanStudentName}_Term${options.term}_${classCode}_${year}.pdf`;
+  doc.save(fileName);
+}
+
