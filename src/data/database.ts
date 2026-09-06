@@ -19,6 +19,13 @@ import type {
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from './firebase';
+import {
+  enqueueOperation,
+  dequeueAll,
+  requeueOperation,
+  getQueueLength,
+  type QueuedOperation,
+} from './offlineQueue';
 import { defaultClasses, COLOMBO_GOVT_SCHOOLS } from './models';
 import type {
   User,
@@ -506,32 +513,51 @@ export const databaseService = {
   },
 
   async insertLeaveRequest(request: LeaveRequest): Promise<void> {
-    await setDoc(doc(leaveRequestsCol, request.id), cleanData(request));
+    // ── Offline-safe ──
+    if (!navigator.onLine) {
+      enqueueOperation({ type: 'insertLeaveRequest', request });
+      console.info('[OfflineQueue] Leave request queued for later sync (device offline).');
+      return;
+    }
 
-    const isPrincipal = request.applicantRole === 'principal';
+    try {
+      await setDoc(doc(leaveRequestsCol, request.id), cleanData(request));
 
-    // If Principal applied, notify Zonal Admin. If Teacher applied, notify Principal.
-    const notice: Notice = {
-      id: `notice_leave_${request.id}`,
-      title: isPrincipal
-        ? `🏛️ Principal Leave Request: ${request.teacherName} (${request.schoolName || 'School'})`
-        : `Leave Request: ${request.teacherName}`,
-      body: isPrincipal
-        ? `Principal ${request.teacherName} of ${request.schoolName || 'School'} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}\n\nPlease review and approve in the Zonal Admin Command Center.`
-        : `${request.teacherName} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}`,
-      date: new Date().toISOString(),
-      category: 'Leave Request',
-      targetRole: isPrincipal ? 'zonal_admin' : 'principal',
-      authorName: request.teacherName,
-      authorRole: isPrincipal ? 'principal' : 'teacher',
-      priority: 'urgent',
-      schoolCensusCode: request.schoolCensusCode,
-      schoolName: request.schoolName,
-    };
-    await setDoc(doc(noticesCol, notice.id), cleanData(notice));
+      const isPrincipal = request.applicantRole === 'principal';
+
+      // If Principal applied, notify Zonal Admin. If Teacher applied, notify Principal.
+      const notice: Notice = {
+        id: `notice_leave_${request.id}`,
+        title: isPrincipal
+          ? `🏛️ Principal Leave Request: ${request.teacherName} (${request.schoolName || 'School'})`
+          : `Leave Request: ${request.teacherName}`,
+        body: isPrincipal
+          ? `Principal ${request.teacherName} of ${request.schoolName || 'School'} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}\n\nPlease review and approve in the Zonal Admin Command Center.`
+          : `${request.teacherName} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}`,
+        date: new Date().toISOString(),
+        category: 'Leave Request',
+        targetRole: isPrincipal ? 'zonal_admin' : 'principal',
+        authorName: request.teacherName,
+        authorRole: isPrincipal ? 'principal' : 'teacher',
+        priority: 'urgent',
+        schoolCensusCode: request.schoolCensusCode,
+        schoolName: request.schoolName,
+      };
+      await setDoc(doc(noticesCol, notice.id), cleanData(notice));
+    } catch (err) {
+      enqueueOperation({ type: 'insertLeaveRequest', request });
+      console.warn('[OfflineQueue] Leave request write failed, queued for sync. Error:', err);
+    }
   },
 
   async updateLeaveRequest(request: LeaveRequest): Promise<LeaveRequest> {
+    // ── Offline-safe: if offline, queue the update ──
+    if (!navigator.onLine) {
+      enqueueOperation({ type: 'updateLeaveRequest', request });
+      console.info('[OfflineQueue] Leave update queued for later sync (device offline).');
+      return request;
+    }
+
     let updatedReq = { ...request };
     const isPrincipal = request.applicantRole === 'principal';
 
@@ -680,60 +706,73 @@ export const databaseService = {
     teacherName: string,
     studentMap: Record<string, Student>
   ): Promise<void> {
-    const batch = writeBatch(db);
-    const nowIso = new Date().toISOString();
-
-    for (const record of records) {
-      // 1. Save or update attendance record
-      let attDocRef;
-      if (record.id) {
-        attDocRef = doc(attendanceCol, record.id);
-        batch.set(attDocRef, cleanData(record), { merge: true });
-      } else {
-        attDocRef = doc(collection(db, 'attendance'));
-        batch.set(attDocRef, cleanData({ ...record, id: attDocRef.id }));
-      }
-
-      // 2. Generate real-time Parent Notification document
-      const stu = studentMap[record.studentId];
-      const studentName = stu ? stu.name : record.studentId;
-      const statusTitle = record.status.toUpperCase();
-      const parentPhone = stu ? stu.parentContact : '';
-
-      const priorityVal: 'normal' | 'high' | 'urgent' =
-        record.status === 'absent' ? 'urgent' : record.status === 'late' ? 'high' : 'normal';
-
-      const statusMessageMap: Record<string, string> = {
-        present: `${studentName} was marked PRESENT for school on ${record.date}.`,
-        absent: `🚨 URGENT NOTICE: ${studentName} (Class: ${stu?.classRoom || ''}) was marked ABSENT from school on ${record.date}. If this absence was unexcused, please contact the school immediately.`,
-        late: `⚠️ ATTENDANCE ALERT: ${studentName} arrived LATE to school on ${record.date}. Recorded by ${teacherName || 'Class Teacher'}.`,
-        excused: `${studentName} attendance was marked EXCUSED on ${record.date}.`,
-      };
-
-      const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}_${Date.now()}`;
-      const notifDocRef = doc(parentNotificationsCol, notifId);
-
-      const parentNotif: ParentNotification = {
-        id: notifId,
-        studentId: record.studentId,
-        studentName: studentName,
-        date: record.date,
-        status: record.status,
-        title: record.status === 'absent' ? `🚨 ABSENT ALERT: ${studentName}` : record.status === 'late' ? `⚠️ LATE ARRIVAL: ${studentName}` : `Attendance Update: ${statusTitle}`,
-        message: statusMessageMap[record.status] || `${studentName} was marked ${statusTitle} on ${record.date}.`,
-        timestamp: nowIso,
-        read: false,
-        teacherName: teacherName || 'Class Teacher',
-        type: 'attendance',
-        priority: priorityVal,
-        parentContact: parentPhone,
-        actionRequired: record.status === 'absent' || record.status === 'late',
-      };
-
-      batch.set(notifDocRef, parentNotif);
+    // ── Offline-safe: if offline or Firestore unavailable, queue locally ──
+    if (!navigator.onLine) {
+      enqueueOperation({ type: 'saveAttendance', records, teacherName, studentMap });
+      console.info('[OfflineQueue] Attendance queued for later sync (device offline).');
+      return;
     }
 
-    await batch.commit();
+    try {
+      const batch = writeBatch(db);
+      const nowIso = new Date().toISOString();
+
+      for (const record of records) {
+        // 1. Save or update attendance record
+        let attDocRef;
+        if (record.id) {
+          attDocRef = doc(attendanceCol, record.id);
+          batch.set(attDocRef, cleanData(record), { merge: true });
+        } else {
+          attDocRef = doc(collection(db, 'attendance'));
+          batch.set(attDocRef, cleanData({ ...record, id: attDocRef.id }));
+        }
+
+        // 2. Generate real-time Parent Notification document
+        const stu = studentMap[record.studentId];
+        const studentName = stu ? stu.name : record.studentId;
+        const statusTitle = record.status.toUpperCase();
+        const parentPhone = stu ? stu.parentContact : '';
+
+        const priorityVal: 'normal' | 'high' | 'urgent' =
+          record.status === 'absent' ? 'urgent' : record.status === 'late' ? 'high' : 'normal';
+
+        const statusMessageMap: Record<string, string> = {
+          present: `${studentName} was marked PRESENT for school on ${record.date}.`,
+          absent: `🚨 URGENT NOTICE: ${studentName} (Class: ${stu?.classRoom || ''}) was marked ABSENT from school on ${record.date}. If this absence was unexcused, please contact the school immediately.`,
+          late: `⚠️ ATTENDANCE ALERT: ${studentName} arrived LATE to school on ${record.date}. Recorded by ${teacherName || 'Class Teacher'}.`,
+          excused: `${studentName} attendance was marked EXCUSED on ${record.date}.`,
+        };
+
+        const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}_${Date.now()}`;
+        const notifDocRef = doc(parentNotificationsCol, notifId);
+
+        const parentNotif: ParentNotification = {
+          id: notifId,
+          studentId: record.studentId,
+          studentName: studentName,
+          date: record.date,
+          status: record.status,
+          title: record.status === 'absent' ? `🚨 ABSENT ALERT: ${studentName}` : record.status === 'late' ? `⚠️ LATE ARRIVAL: ${studentName}` : `Attendance Update: ${statusTitle}`,
+          message: statusMessageMap[record.status] || `${studentName} was marked ${statusTitle} on ${record.date}.`,
+          timestamp: nowIso,
+          read: false,
+          teacherName: teacherName || 'Class Teacher',
+          type: 'attendance',
+          priority: priorityVal,
+          parentContact: parentPhone,
+          actionRequired: record.status === 'absent' || record.status === 'late',
+        };
+
+        batch.set(notifDocRef, parentNotif);
+      }
+
+      await batch.commit();
+    } catch (err) {
+      // Firestore unavailable — queue for later sync
+      enqueueOperation({ type: 'saveAttendance', records, teacherName, studentMap });
+      console.warn('[OfflineQueue] Attendance write failed, queued for sync. Error:', err);
+    }
   },
 
   generateParentAlertMessage(student: Student, status: AttendanceStatus, date: string, teacherName: string) {
@@ -779,14 +818,27 @@ export const databaseService = {
 
   async saveTermMarksBatch(marks: TermMark[]): Promise<void> {
     if (marks.length === 0) return;
-    const batch = writeBatch(db);
-    for (const m of marks) {
-      const cleanSub = m.subject.replace(/[^a-zA-Z0-9]/g, '_');
-      const docId = `${m.studentId}_${cleanSub}_${m.term}`;
-      const docRef = doc(termMarksCol, docId);
-      batch.set(docRef, cleanData(m), { merge: true });
+
+    // ── Offline-safe ──
+    if (!navigator.onLine) {
+      enqueueOperation({ type: 'saveTermMarks', marks });
+      console.info('[OfflineQueue] Term marks queued for later sync (device offline).');
+      return;
     }
-    await batch.commit();
+
+    try {
+      const batch = writeBatch(db);
+      for (const m of marks) {
+        const cleanSub = m.subject.replace(/[^a-zA-Z0-9]/g, '_');
+        const docId = `${m.studentId}_${cleanSub}_${m.term}`;
+        const docRef = doc(termMarksCol, docId);
+        batch.set(docRef, cleanData(m), { merge: true });
+      }
+      await batch.commit();
+    } catch (err) {
+      enqueueOperation({ type: 'saveTermMarks', marks });
+      console.warn('[OfflineQueue] Term marks write failed, queued for sync. Error:', err);
+    }
   },
 
   subscribeToStudents(
@@ -1442,5 +1494,155 @@ export const databaseService = {
       console.error('[EduNexus] sendParentSms error:', err);
       return { success: false, error: err?.message || 'SMS delivery failed.' };
     }
+  },
+
+  // ─── Offline Queue Replay ─────────────────────────────────────────────────
+
+  /**
+   * Drains the offline queue and re-submits all pending operations to Firestore.
+   * Called automatically by `useNetworkStatus` the moment the device comes back online.
+   *
+   * Any operation that fails again (e.g., transient error) is re-enqueued so it
+   * won't be silently lost. Operations that succeed are consumed permanently.
+   *
+   * Returns a summary of results.
+   */
+  async replayOfflineQueue(): Promise<{ replayed: number; failed: number }> {
+    if (!navigator.onLine) {
+      console.info('[OfflineQueue] Replay skipped — still offline.');
+      return { replayed: 0, failed: 0 };
+    }
+
+    const pending = dequeueAll();
+    if (pending.length === 0) return { replayed: 0, failed: 0 };
+
+    console.info(`[OfflineQueue] Replaying ${pending.length} queued operation(s)…`);
+
+    let replayed = 0;
+    let failed = 0;
+
+    for (const op of pending) {
+      try {
+        await this._executeQueuedOp(op);
+        replayed++;
+        console.info(`[OfflineQueue] ✅ Replayed: ${op.payload.type} (id=${op.id})`);
+      } catch (err) {
+        failed++;
+        console.warn(`[OfflineQueue] ❌ Replay failed for ${op.payload.type} (id=${op.id}):`, err);
+        // Re-enqueue failed ops so they are not lost
+        requeueOperation(op);
+      }
+    }
+
+    console.info(`[OfflineQueue] Replay complete — ${replayed} succeeded, ${failed} re-queued.`);
+    return { replayed, failed };
+  },
+
+  /**
+   * Execute a single queued operation against Firestore.
+   * This is a private helper used only by `replayOfflineQueue`.
+   */
+  async _executeQueuedOp(op: QueuedOperation): Promise<void> {
+    const { payload } = op;
+
+    switch (payload.type) {
+      case 'saveAttendance': {
+        // Temporarily bypass the offline guard for replay
+        const batch = writeBatch(db);
+        const nowIso = new Date().toISOString();
+        for (const record of payload.records) {
+          let attDocRef;
+          if (record.id) {
+            attDocRef = doc(attendanceCol, record.id);
+            batch.set(attDocRef, cleanData(record), { merge: true });
+          } else {
+            attDocRef = doc(collection(db, 'attendance'));
+            batch.set(attDocRef, cleanData({ ...record, id: attDocRef.id }));
+          }
+          // Rebuild and queue parent notification
+          const stu = payload.studentMap[record.studentId];
+          const studentName = stu ? stu.name : record.studentId;
+          const statusTitle = record.status.toUpperCase();
+          const parentPhone = stu ? stu.parentContact : '';
+          const priorityVal: 'normal' | 'high' | 'urgent' =
+            record.status === 'absent' ? 'urgent' : record.status === 'late' ? 'high' : 'normal';
+          const msgMap: Record<string, string> = {
+            present: `${studentName} was marked PRESENT for school on ${record.date}.`,
+            absent: `🚨 URGENT NOTICE: ${studentName} (Class: ${stu?.classRoom || ''}) was marked ABSENT from school on ${record.date}.`,
+            late: `⚠️ ATTENDANCE ALERT: ${studentName} arrived LATE to school on ${record.date}. Recorded by ${payload.teacherName || 'Class Teacher'}.`,
+            excused: `${studentName} attendance was marked EXCUSED on ${record.date}.`,
+          };
+          const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}_replay_${Date.now()}`;
+          const notifDocRef = doc(parentNotificationsCol, notifId);
+          const parentNotif: ParentNotification = {
+            id: notifId,
+            studentId: record.studentId,
+            studentName,
+            date: record.date,
+            status: record.status,
+            title: record.status === 'absent' ? `🚨 ABSENT ALERT: ${studentName}` : record.status === 'late' ? `⚠️ LATE ARRIVAL: ${studentName}` : `Attendance Update: ${statusTitle}`,
+            message: msgMap[record.status] || `${studentName} was marked ${statusTitle} on ${record.date}.`,
+            timestamp: nowIso,
+            read: false,
+            teacherName: payload.teacherName || 'Class Teacher',
+            type: 'attendance',
+            priority: priorityVal,
+            parentContact: parentPhone,
+            actionRequired: record.status === 'absent' || record.status === 'late',
+          };
+          batch.set(notifDocRef, parentNotif);
+        }
+        await batch.commit();
+        break;
+      }
+
+      case 'saveTermMarks': {
+        const batch = writeBatch(db);
+        for (const m of payload.marks) {
+          const cleanSub = m.subject.replace(/[^a-zA-Z0-9]/g, '_');
+          const docId = `${m.studentId}_${cleanSub}_${m.term}`;
+          const docRef = doc(termMarksCol, docId);
+          batch.set(docRef, cleanData(m), { merge: true });
+        }
+        await batch.commit();
+        break;
+      }
+
+      case 'insertLeaveRequest': {
+        await setDoc(doc(leaveRequestsCol, payload.request.id), cleanData(payload.request));
+        const isPrincipal = payload.request.applicantRole === 'principal';
+        const notice: Notice = {
+          id: `notice_leave_${payload.request.id}`,
+          title: isPrincipal
+            ? `🏛️ Principal Leave Request: ${payload.request.teacherName}`
+            : `Leave Request: ${payload.request.teacherName}`,
+          body: `${payload.request.teacherName} has submitted a ${payload.request.type.toUpperCase()} leave request from ${payload.request.startDate} to ${payload.request.endDate}.\nReason: ${payload.request.reason}`,
+          date: new Date().toISOString(),
+          category: 'Leave Request',
+          targetRole: isPrincipal ? 'zonal_admin' : 'principal',
+          authorName: payload.request.teacherName,
+          authorRole: isPrincipal ? 'principal' : 'teacher',
+          priority: 'urgent',
+          schoolCensusCode: payload.request.schoolCensusCode,
+          schoolName: payload.request.schoolName,
+        };
+        await setDoc(doc(noticesCol, notice.id), cleanData(notice));
+        break;
+      }
+
+      case 'updateLeaveRequest': {
+        await setDoc(doc(leaveRequestsCol, payload.request.id), cleanData(payload.request), { merge: true });
+        break;
+      }
+
+      default: {
+        console.warn('[OfflineQueue] Unknown operation type, skipping.');
+      }
+    }
+  },
+
+  /** Returns the number of operations currently in the offline queue. */
+  getOfflineQueueLength(): number {
+    return getQueueLength();
   },
 };

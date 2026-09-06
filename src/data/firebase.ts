@@ -1,5 +1,9 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 
 const firebaseConfig = {
@@ -13,6 +17,19 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+/**
+ * Initialise Firestore with IndexedDB persistence so that:
+ * - All reads are cached locally and served even when offline
+ * - Writes made while offline are buffered and automatically
+ *   flushed to Firestore once connectivity is restored
+ * - Multiple browser tabs share the same IndexedDB cache
+ */
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+});
+
 export const functions = getFunctions(app);
 

@@ -11,12 +11,17 @@ import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
 import type { Student, SchoolClass, AttendanceRecord, AttendanceStatus } from '../data/models';
 import StudentProfileModal from '../components/StudentProfileModal';
+import OfflineBanner from '../components/OfflineBanner';
+import { useNetworkStatus } from '../utils/useNetworkStatus';
 
 const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'excused'];
 
 export default function AttendanceScreen() {
   const { user, language } = useAuth();
   const isPrincipal = user?.role === 'principal';
+
+  // Network status — drives the offline banner and auto-sync on reconnect
+  const networkStatus = useNetworkStatus(() => databaseService.replayOfflineQueue());
 
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -277,7 +282,7 @@ export default function AttendanceScreen() {
       }
 
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       console.error('Failed to save attendance and notify parents:', err);
     } finally {
@@ -704,6 +709,9 @@ export default function AttendanceScreen() {
 
     return (
       <div className="page">
+        {/* ── Offline / Sync Status Banner ── */}
+        <OfflineBanner networkStatus={networkStatus} />
+
         {/* ── Page Header ── */}
         <div className="page-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
           <div>
@@ -1537,10 +1545,17 @@ export default function AttendanceScreen() {
             disabled={saving || students.length === 0}
           >
             {saving ? <span className="spinner" /> : <Save size={15} />}
-            {saved ? '✓ Saved!' : t('saveAttendance', language)}
+            {saving
+              ? t('saveAttendance', language)
+              : saved
+                ? (networkStatus.isOnline ? '✓ Saved!' : '✓ Saved Locally')
+                : t('saveAttendance', language)}
           </button>
         </div>
       </div>
+
+      {/* ── Offline / Sync Status Banner ── */}
+      <OfflineBanner networkStatus={networkStatus} />
 
       {/* Success Notification Alert */}
       {actionSuccessMsg && (

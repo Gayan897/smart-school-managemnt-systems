@@ -9,6 +9,8 @@ import { databaseService } from '../data/database';
 import type { Student, SchoolClass, TermMark } from '../data/models';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import StudentProfileModal from '../components/StudentProfileModal';
+import OfflineBanner from '../components/OfflineBanner';
+import { useNetworkStatus } from '../utils/useNetworkStatus';
 
 export interface SubjectOption {
   id: string;
@@ -56,6 +58,9 @@ const TERMS = [1, 2, 3];
 export default function PerformanceScreen() {
   const { user, language } = useAuth();
   const isPrincipal = user?.role === 'principal' || user?.role === 'zonal_admin';
+
+  // Network status — drives the offline banner and auto-sync on reconnect
+  const networkStatus = useNetworkStatus(() => databaseService.replayOfflineQueue());
 
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -322,6 +327,9 @@ export default function PerformanceScreen() {
   if (isPrincipal) {
     return (
       <div className="page">
+        {/* ── Offline / Sync Status Banner ── */}
+        <OfflineBanner networkStatus={networkStatus} />
+
         <div className="page-header">
           <div>
             <h1 className="page-title">{t('performance', language)}</h1>
@@ -424,8 +432,11 @@ export default function PerformanceScreen() {
   // ═══════════════════════════════════════════════════════════════════
   // TEACHER VIEW — Scoped exclusively to Assigned Homeroom Class
   // ═══════════════════════════════════════════════════════════════════
-  return (
+    return (
     <div className="page">
+      {/* ── Offline / Sync Status Banner ── */}
+      <OfflineBanner networkStatus={networkStatus} />
+
       <div className="page-header">
         <div>
           <h1 className="page-title">{t('performance', language)}</h1>
@@ -441,7 +452,9 @@ export default function PerformanceScreen() {
               disabled={saving || students.length === 0}
             >
               {saving ? <span className="spinner" /> : <Save size={15} />}
-              {saved ? '✓ Saved!' : 'Save Subject Marks'}
+              {saved
+                ? (networkStatus.isOnline ? '✓ Saved!' : '✓ Saved Locally')
+                : 'Save Subject Marks'}
             </button>
           )}
           {activeTab === 'by_student' && (
@@ -451,7 +464,9 @@ export default function PerformanceScreen() {
               disabled={saving || !selectedStudentId}
             >
               {saving ? <span className="spinner" /> : <Save size={15} />}
-              {saved ? '✓ Saved!' : 'Save Student Marksheet'}
+              {saved
+                ? (networkStatus.isOnline ? '✓ Saved!' : '✓ Saved Locally')
+                : 'Save Student Marksheet'}
             </button>
           )}
         </div>

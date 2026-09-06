@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
 import { calculateLeaveDays, type LeaveRequest, type LeaveType, type LeaveStatus } from '../data/models';
+import OfflineBanner from '../components/OfflineBanner';
+import { useNetworkStatus } from '../utils/useNetworkStatus';
 
 export default function LeaveScreen() {
   const { user, language } = useAuth();
@@ -16,6 +18,9 @@ export default function LeaveScreen() {
   const [comment, setComment] = useState('');
   const [commentTarget, setCommentTarget] = useState<string | null>(null);
   const [lastApprovedLeave, setLastApprovedLeave] = useState<LeaveRequest | null>(null);
+
+  // Network status — drives the offline banner and auto-sync on reconnect
+  const networkStatus = useNetworkStatus(() => databaseService.replayOfflineQueue());
 
   // Form state
   const [form, setForm] = useState({
@@ -164,6 +169,9 @@ export default function LeaveScreen() {
           </button>
         )}
       </div>
+
+      {/* ── Offline / Sync Status Banner ── */}
+      <OfflineBanner networkStatus={networkStatus} />
 
       {/* Banner when leave is approved */}
       {lastApprovedLeave && (
