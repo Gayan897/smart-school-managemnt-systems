@@ -1,13 +1,13 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  Plus, Trash2, Sparkles, UserCheck, Send, Printer, Download,
+  Plus, Trash2, Sparkles, Send, Printer, Download,
   Share2, Coffee, Clock, Calendar, CheckCircle2, AlertCircle,
   Copy, RefreshCw, X, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { TimetableSlot, SchoolClass, ProxyAssignment, Teacher } from '../data/models';
+import type { TimetableSlot, SchoolClass, Teacher } from '../data/models';
 import {
   SL_BELL_SCHEDULE,
   SL_PERIOD_NUMBERS,
@@ -37,10 +37,8 @@ export default function TimetableScreen() {
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [proxyAssignments, setProxyAssignments] = useState<ProxyAssignment[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>(2026);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(true);
 
   // Modals
@@ -77,17 +75,20 @@ export default function TimetableScreen() {
 
   async function load() {
     try {
-      const [cls, s, proxies, tList] = await Promise.all([
+      const isPrincipal = user?.role === 'principal';
+      const [cls, s, tList] = await Promise.all([
         databaseService.getClasses(),
         databaseService.getTimetable(),
-        databaseService.getProxyAssignments(),
-        databaseService.getTeachers(user?.schoolCensusCode),
+        isPrincipal ? databaseService.getTeachers(user?.schoolCensusCode) : Promise.resolve([]),
       ]);
       setClasses(cls);
       setSlots(s);
-      setProxyAssignments(proxies);
       setTeachers(tList);
-      if (cls.length > 0 && !selectedClass) {
+
+      // For teachers/students: lock to their own homeroom class
+      if (!isPrincipal && user?.classRoom) {
+        setSelectedClass(user.classRoom);
+      } else if (cls.length > 0 && !selectedClass) {
         setSelectedClass(cls[0].id);
       }
     } catch (err) {
@@ -125,16 +126,6 @@ export default function TimetableScreen() {
 
   function getSlot(day: number, period: number): TimetableSlot | undefined {
     return classSlots.find((s) => s.dayOfWeek === day && s.period === period);
-  }
-
-  function getProxyForSlot(period: number): ProxyAssignment | undefined {
-    return proxyAssignments.find(
-      (p) =>
-        p.date === selectedDate &&
-        p.classRoom === selectedClass &&
-        p.period === period &&
-        p.status !== 'declined'
-    );
   }
 
   // Handle Manual Add Slot
@@ -286,8 +277,8 @@ export default function TimetableScreen() {
     );
   }
 
-  const dateObj = new Date(selectedDate);
-  const selectedDayNum = dateObj.getDay() === 0 || dateObj.getDay() === 6 ? 1 : dateObj.getDay();
+  const currentDay = new Date().getDay();
+  const todayDayNum = currentDay === 0 || currentDay === 6 ? 1 : currentDay;
 
   return (
     <div className="page">
@@ -386,26 +377,59 @@ export default function TimetableScreen() {
         </div>
       </div>
 
-      {/* Control Bar: Class, Year, Active Date */}
+      {/* Control Bar: Class & Year */}
       <div className="card" style={{ marginBottom: '20px', padding: '16px' }}>
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="form-group" style={{ margin: 0, minWidth: '220px', flex: '1 1 200px' }}>
+          <div className="form-group" style={{ margin: 0, minWidth: '240px', flex: '1 1 240px' }}>
             <label className="form-label" style={{ fontWeight: 600 }}>{t('selectClass', language)}</label>
-            <select
-              className="form-control"
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-            >
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  Grade {c.grade}{c.section} — {c.stream === 'ol' ? 'O/L (Grades 10–11)' : 'A/L Stream'}
-                  {c.homeroomTeacherName ? ` (${c.homeroomTeacherName})` : ''}
-                </option>
-              ))}
-            </select>
+
+            {user?.role === 'principal' ? (
+              /* Principal: full dropdown to switch between all classes */
+              <select
+                className="form-control"
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+              >
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    Grade {c.grade}{c.section} — {c.stream === 'ol' ? 'O/L (Grades 10–11)' : 'A/L Stream'}
+                    {c.homeroomTeacherName ? ` (${c.homeroomTeacherName})` : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              /* Teacher / Student: locked to their own class — read-only */
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                background: 'rgba(99,102,241,0.08)',
+                border: '1.5px solid var(--primary)',
+              }}>
+                <ShieldAlert size={16} color="var(--primary)" />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+                    {selectedClass
+                      ? (() => {
+                          const cls = classes.find(c => c.id === selectedClass);
+                          return cls
+                            ? `Grade ${cls.grade}${cls.section} — ${cls.stream === 'ol' ? 'O/L' : 'A/L'}`
+                            : selectedClass;
+                        })()
+                      : 'Loading…'
+                    }
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Your assigned class timetable
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="form-group" style={{ margin: 0, minWidth: '140px' }}>
+          <div className="form-group" style={{ margin: 0, minWidth: '160px' }}>
             <label className="form-label" style={{ fontWeight: 600 }}>Academic Year</label>
             <select
               className="form-control"
@@ -416,18 +440,6 @@ export default function TimetableScreen() {
               <option value={2027}>2027 Academic Year</option>
               <option value={2025}>2025 Academic Year</option>
             </select>
-          </div>
-
-          <div className="form-group" style={{ margin: 0, minWidth: '180px' }}>
-            <label className="form-label" style={{ fontWeight: 600 }}>
-              Active Date (Substitute Overlay)
-            </label>
-            <input
-              type="date"
-              className="form-control"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
           </div>
 
           {user?.role === 'principal' && classSlots.length > 0 && (
@@ -443,6 +455,7 @@ export default function TimetableScreen() {
           )}
         </div>
       </div>
+
 
       {/* Bell Schedule Summary Banner */}
       <div style={{
@@ -496,10 +509,10 @@ export default function TimetableScreen() {
           {DAYS.map((d) => (
             <div
               key={d.num}
-              className={`timetable-cell header ${d.num === selectedDayNum ? 'header-highlight' : ''}`}
+              className={`timetable-cell header ${d.num === todayDayNum ? 'header-highlight' : ''}`}
               style={{
-                background: d.num === selectedDayNum ? 'rgba(99, 102, 241, 0.15)' : undefined,
-                color: d.num === selectedDayNum ? '#818cf8' : undefined,
+                background: d.num === todayDayNum ? 'rgba(99, 102, 241, 0.15)' : undefined,
+                color: d.num === todayDayNum ? '#818cf8' : undefined,
                 flexDirection: 'column',
               }}
             >
@@ -507,9 +520,9 @@ export default function TimetableScreen() {
               <span style={{ fontSize: '10px', opacity: 0.8, fontWeight: 400 }}>
                 {d.labelSi} • {d.labelTa}
               </span>
-              {d.num === selectedDayNum && (
+              {d.num === todayDayNum && (
                 <span style={{ fontSize: '9px', color: '#6366f1', fontWeight: 700 }}>
-                  Active Date
+                  Today
                 </span>
               )}
             </div>
@@ -529,12 +542,10 @@ export default function TimetableScreen() {
 
                 {DAYS.map((d) => {
                   const slot = getSlot(d.num, p);
-                  const proxy = d.num === selectedDayNum ? getProxyForSlot(p) : undefined;
                   return (
                     <SlotCell
                       key={`${d.num}-${p}`}
                       slot={slot}
-                      proxy={proxy}
                       isPrincipal={user?.role === 'principal'}
                       onDelete={() => handleDelete(d.num, p)}
                     />
@@ -565,12 +576,10 @@ export default function TimetableScreen() {
 
                 {DAYS.map((d) => {
                   const slot = getSlot(d.num, p);
-                  const proxy = d.num === selectedDayNum ? getProxyForSlot(p) : undefined;
                   return (
                     <SlotCell
                       key={`${d.num}-${p}`}
                       slot={slot}
-                      proxy={proxy}
                       isPrincipal={user?.role === 'principal'}
                       onDelete={() => handleDelete(d.num, p)}
                     />
@@ -1110,16 +1119,13 @@ export default function TimetableScreen() {
  */
 function SlotCell({
   slot,
-  proxy,
   isPrincipal,
   onDelete,
 }: {
   slot?: TimetableSlot;
-  proxy?: ProxyAssignment;
   isPrincipal: boolean;
   onDelete: () => void;
 }) {
-  // Find subject color
   const matchedSubject = SL_OL_8_SUBJECTS.find(
     (s) => slot && s.nameEn.toLowerCase() === slot.subject.toLowerCase()
   );
@@ -1130,8 +1136,6 @@ function SlotCell({
       className={`timetable-cell ${slot ? 'filled' : ''}`}
       style={{
         position: 'relative',
-        background: proxy ? 'rgba(99, 102, 241, 0.12)' : undefined,
-        border: proxy ? '1px dashed #6366f1' : undefined,
         borderLeft: slot ? `3px solid ${color}` : undefined,
       }}
     >
@@ -1140,39 +1144,9 @@ function SlotCell({
           <span className="timetable-slot-subject" title={slot.subject}>
             {slot.subject}
           </span>
+          <span className="timetable-slot-teacher">{slot.teacher}</span>
 
-          {proxy ? (
-            <div
-              style={{
-                background: 'rgba(99, 102, 241, 0.25)',
-                padding: '3px 6px',
-                borderRadius: '4px',
-                marginTop: '2px',
-                border: '1px solid #6366f1',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  color: '#818cf8',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                }}
-              >
-                <UserCheck size={11} />
-                Proxy: {proxy.substituteTeacherName}
-              </div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                (For {proxy.originalTeacherName})
-              </div>
-            </div>
-          ) : (
-            <span className="timetable-slot-teacher">{slot.teacher}</span>
-          )}
-
-          {isPrincipal && !proxy && (
+          {isPrincipal && (
             <button
               onClick={onDelete}
               style={{

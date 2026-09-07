@@ -159,6 +159,10 @@ export interface User {
   casualBalance?: number;
   medicalBalance?: number;
   annualBalance?: number;
+  // Teacher subject profile
+  subject?: string;          // Main teaching subject
+  otherSubjects?: string[];  // Other subjects the teacher can also handle
+  subjectSetupComplete?: boolean; // True after teacher has filled subject info post-login
 }
 
 export interface Student {
@@ -179,7 +183,8 @@ export interface Student {
 export interface Teacher {
   id: string;
   name: string;
-  subject: string;
+  subject: string;         // Main teaching subject
+  otherSubjects?: string[]; // Other subjects the teacher can handle
   classRoom: string;
   casualBalance: number;
   medicalBalance: number;
@@ -439,6 +444,7 @@ export interface Notice {
   date: string; // ISO String
   category: string;
   targetRole?: NoticeTargetRole;
+  targetClassRoom?: string;   // If set, notice is scoped to this class only (e.g. "11B")
   authorName?: string;
   authorRole?: UserRole;
   priority?: 'normal' | 'high' | 'urgent';
@@ -466,7 +472,16 @@ export function isNoticeRelevantToUser(notice: Notice, user: User | null): boole
     return false;
   }
 
-  // 4. Target Role check
+  // 4. Class-scoped notice: If notice targets a specific classroom, only show to:
+  //    - The principal (always sees all)
+  //    - Teachers/students whose classRoom matches the targetClassRoom
+  if (notice.targetClassRoom) {
+    if (user.role === 'principal') return true; // principal sees everything
+    const userClass = user.classRoom || '';
+    if (userClass !== notice.targetClassRoom) return false;
+  }
+
+  // 5. Target Role check
   if (target === 'all') return true;
   if (user.role === 'principal' && target === 'principal') return true;
   if (user.role === 'teacher' && target === 'teacher') return true;

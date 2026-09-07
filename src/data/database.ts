@@ -151,7 +151,7 @@ export const databaseService = {
     await setDoc(doc(usersCol, user.id), cleanData(user));
   },
 
-  async updateUserProfile(userId: string, updates: Partial<User> & { subject?: string; classRoom?: string }): Promise<User> {
+  async updateUserProfile(userId: string, updates: Partial<User> & { subject?: string; classRoom?: string; otherSubjects?: string[] }): Promise<User> {
     const userRef = doc(usersCol, userId);
     const userSnapshot = await getDocs(query(usersCol, where('id', '==', userId), limit(1)));
     let currentUser: User | null = null;
@@ -159,10 +159,18 @@ export const databaseService = {
       currentUser = userSnapshot.docs[0].data();
     }
 
-    const { subject, classRoom, ...userUpdates } = updates;
+    const { subject, classRoom, otherSubjects, ...userUpdates } = updates;
+
+    // Build full user update (keep subject/otherSubjects in users doc too)
+    const fullUserUpdate: Partial<User> = {
+      ...userUpdates,
+      ...(subject !== undefined ? { subject } : {}),
+      ...(otherSubjects !== undefined ? { otherSubjects } : {}),
+      ...(classRoom !== undefined ? { classRoom } : {}),
+    };
 
     // Update users collection
-    await setDoc(userRef, cleanData(userUpdates), { merge: true });
+    await setDoc(userRef, cleanData(fullUserUpdate), { merge: true });
 
     // Update teachers collection if applicable
     if (currentUser?.role === 'teacher' || subject !== undefined || classRoom !== undefined) {
@@ -170,18 +178,19 @@ export const databaseService = {
       await setDoc(teacherRef, cleanData({
         name: updates.name,
         subject,
+        otherSubjects,
         classRoom,
       }), { merge: true });
     }
 
     const updatedUser: User = {
       ...(currentUser || {} as User),
-      ...userUpdates,
-      ...(classRoom ? { classRoom } : {}),
+      ...fullUserUpdate,
     };
 
     return updatedUser;
   },
+
 
   async getUserByUsername(username: string): Promise<User | null> {
     const clean = username.trim();
@@ -975,7 +984,7 @@ export const databaseService = {
     const { classRoom, className, academicYear, authorName, schoolName, censusCode, messageNote } = params;
     const nowIso = new Date().toISOString();
 
-    // 1. Broadcast system notice
+    // 1. Broadcast system notice — scoped to this class only
     const noticeId = `notice_timetable_${classRoom}_${academicYear}_${Date.now()}`;
     const notice: Notice = {
       id: noticeId,
@@ -989,6 +998,7 @@ export const databaseService = {
       date: nowIso,
       category: 'Academic',
       targetRole: 'all',
+      targetClassRoom: classRoom,   // ← scoped: only visible to this class
       authorName: authorName || 'Principal Office',
       authorRole: 'principal',
       priority: 'high',

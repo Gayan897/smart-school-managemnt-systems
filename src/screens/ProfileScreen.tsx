@@ -2,23 +2,38 @@ import { useState } from 'react';
 import {
   User as UserIcon, Mail, ShieldCheck, Key, BookOpen,
   GraduationCap, Building2, Calendar, CheckCircle, Save,
-  Lock, Eye, EyeOff, FileText, Award, Smartphone
+  Lock, Eye, EyeOff, FileText, Award, Smartphone, Plus, X, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
 import type { User } from '../data/models';
+import { SL_OL_8_SUBJECTS } from '../data/models';
+
+// All Sri Lankan subjects list (same as setup modal)
+const ALL_SL_SUBJECTS = [
+  'Mathematics', 'Science', 'Sinhala Language & Literature', 'Tamil Language & Literature',
+  'English Language', 'Religion (Buddhism)', 'Religion (Christianity)', 'Religion (Hinduism)',
+  'Religion (Islam)', 'History', 'Commerce / Business Studies', 'ICT / Information Technology',
+  'Agriculture', 'Aesthetic Studies / Art', 'Health & Physical Education',
+  'Combined Mathematics', 'Physics', 'Chemistry', 'Biology', 'Economics', 'Accounting',
+  'Business Studies', 'Geography', 'Political Science', 'Logic', 'Sinhala Literature',
+  'Tamil Literature', 'Engineering Technology', 'Science for Technology', 'Drawing',
+  'General English', 'Civic Education', 'Drama & Theatre', 'Music', 'Dancing',
+];
 
 export default function ProfileScreen() {
   const { user, language, updateUserSession } = useAuth();
 
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [subject, setSubject] = useState(user?.classRoom ? 'Information Technology' : 'General');
+  const [mainSubject, setMainSubject] = useState(user?.subject || '');
+  const [otherSubjects, setOtherSubjects] = useState<string[]>(user?.otherSubjects || []);
   const [classRoom, setClassRoom] = useState(user?.classRoom || '10A');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showSubjectPicker, setShowSubjectPicker] = useState(false);
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -27,12 +42,17 @@ export default function ProfileScreen() {
 
   const [showNicPreview, setShowNicPreview] = useState<'front' | 'back' | null>(null);
 
+
   if (!user) return null;
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
       setProfileMsg({ type: 'error', text: 'Full Name cannot be empty.' });
+      return;
+    }
+    if (user?.role === 'teacher' && !mainSubject.trim()) {
+      setProfileMsg({ type: 'error', text: 'Please select your main teaching subject.' });
       return;
     }
     setSavingProfile(true);
@@ -43,9 +63,11 @@ export default function ProfileScreen() {
         name: name.trim(),
         email: email.trim(),
         classRoom: classRoom.trim(),
-        subject: subject.trim(),
+        subject: mainSubject.trim(),
+        otherSubjects,
+        subjectSetupComplete: true,
       });
-      updateUserSession(updated);
+      updateUserSession({ ...updated, subject: mainSubject.trim(), otherSubjects, subjectSetupComplete: true });
       setProfileMsg({ type: 'success', text: '✅ Profile details updated successfully!' });
     } catch (err: unknown) {
       setProfileMsg({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update profile.' });
@@ -231,14 +253,179 @@ export default function ProfileScreen() {
 
             {user.role === 'teacher' && (
               <>
+                {/* Main Subject Picker */}
                 <div className="form-group">
-                  <label className="form-label">Teaching Subject</label>
-                  <input
-                    className="form-control"
-                    value={subject}
-                    onChange={e => setSubject(e.target.value)}
-                    placeholder="e.g. Mathematics, Science, IT"
-                  />
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                    <BookOpen size={15} color="var(--primary)" />
+                    Main Teaching Subject *
+                  </label>
+
+                  {/* Current selection display */}
+                  {mainSubject && !showSubjectPicker && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        background: 'rgba(79, 70, 229, 0.08)',
+                        border: '1.5px solid var(--primary)',
+                        marginBottom: '8px',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => setShowSubjectPicker(true)}
+                    >
+                      <CheckCircle2 size={16} color="var(--primary)" />
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{mainSubject}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600 }}>Change ›</span>
+                    </div>
+                  )}
+
+                  {(!mainSubject || showSubjectPicker) && (
+                    <div
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        background: 'var(--bg-hover)',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>
+                        Click to select your primary teaching subject:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {ALL_SL_SUBJECTS.map((sub) => {
+                          const slMatch = SL_OL_8_SUBJECTS.find((s) => s.nameEn.toLowerCase() === sub.toLowerCase());
+                          const color = slMatch?.color || 'var(--primary)';
+                          const isSelected = mainSubject === sub;
+                          return (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => {
+                                setMainSubject(sub);
+                                setOtherSubjects((prev) => prev.filter((s) => s !== sub));
+                                setShowSubjectPicker(false);
+                              }}
+                              style={{
+                                padding: '4px 12px',
+                                borderRadius: '16px',
+                                border: isSelected ? `2px solid ${color}` : '1px solid var(--border)',
+                                background: isSelected ? color : 'var(--bg-card)',
+                                color: isSelected ? '#fff' : 'var(--text-primary)',
+                                fontSize: '11px',
+                                fontWeight: isSelected ? 700 : 400,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {isSelected && '✓ '}{sub}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {showSubjectPicker && (
+                        <button
+                          type="button"
+                          onClick={() => setShowSubjectPicker(false)}
+                          style={{
+                            marginTop: '8px',
+                            fontSize: '11px',
+                            color: 'var(--text-muted)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '4px 0',
+                          }}
+                        >
+                          ✕ Close picker
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Other Subjects Multi-Select */}
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                    <GraduationCap size={15} color="#0d9488" />
+                    Other Subjects You Can Teach
+                    <span style={{ fontWeight: 400, fontSize: '11px', color: 'var(--text-muted)' }}>(Optional — for substitute allocation)</span>
+                  </label>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                    {ALL_SL_SUBJECTS.filter((s) => s !== mainSubject).map((sub) => {
+                      const isSelected = otherSubjects.includes(sub);
+                      const slMatch = SL_OL_8_SUBJECTS.find((s2) => s2.nameEn.toLowerCase() === sub.toLowerCase());
+                      const color = slMatch?.color || '#0d9488';
+                      return (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() =>
+                            setOtherSubjects((prev) =>
+                              prev.includes(sub) ? prev.filter((s) => s !== sub) : [...prev, sub]
+                            )
+                          }
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '16px',
+                            border: isSelected ? `1.5px solid ${color}` : '1px solid var(--border)',
+                            background: isSelected ? `${color}18` : 'transparent',
+                            color: isSelected ? color : 'var(--text-muted)',
+                            fontSize: '11px',
+                            fontWeight: isSelected ? 600 : 400,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          {isSelected ? <X size={9} /> : <Plus size={9} />}
+                          {sub}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {otherSubjects.length > 0 && (
+                    <div
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        background: 'rgba(13, 148, 136, 0.08)',
+                        border: '1px solid rgba(13, 148, 136, 0.25)',
+                        fontSize: '12px',
+                        color: '#0d9488',
+                        display: 'flex',
+                        gap: '6px',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <BookOpen size={13} style={{ flexShrink: 0 }} />
+                      <strong>Also teaching:</strong>
+                      {otherSubjects.map((s) => (
+                        <span
+                          key={s}
+                          style={{
+                            background: '#0d9488',
+                            color: '#fff',
+                            padding: '1px 7px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -252,6 +439,7 @@ export default function ProfileScreen() {
                 </div>
               </>
             )}
+
 
             <div className="form-group">
               <label className="form-label">Username (Permanent Account ID)</label>

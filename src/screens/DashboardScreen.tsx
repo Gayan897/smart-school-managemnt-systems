@@ -4,7 +4,7 @@ import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserChec
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { isNoticeRelevantToUser, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ProxyAssignment, type ZonalKeyRequest } from '../data/models';
+import { isNoticeRelevantToUser, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ZonalKeyRequest } from '../data/models';
 
 export default function DashboardScreen() {
   const { user, language } = useAuth();
@@ -13,7 +13,6 @@ export default function DashboardScreen() {
   const [leaveReqs, setLeaveReqs] = useState<LeaveRequest[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
-  const [proxyAssignments, setProxyAssignments] = useState<ProxyAssignment[]>([]);
   const [pendingKeyRequests, setPendingKeyRequests] = useState<ZonalKeyRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,12 +24,10 @@ export default function DashboardScreen() {
       databaseService.getStudents(userSchoolCode),
       databaseService.getTeachers(userSchoolCode),
       databaseService.getLeaveRequests(userSchoolCode),
-      databaseService.getProxyAssignments(),
-    ]).then(([s, tc, l, p]) => {
+    ]).then(([s, tc, l]) => {
       setStudents(s);
       setTeachers(tc);
       setLeaveReqs(l);
-      setProxyAssignments(p);
     });
 
     // Real-time attendance subscription
@@ -44,11 +41,6 @@ export default function DashboardScreen() {
       setNotices(data);
     });
 
-    // Real-time proxy subscription
-    const unsubProxy = databaseService.subscribeToProxyAssignments((data) => {
-      setProxyAssignments(data);
-    });
-
     // Real-time zonal key requests subscription for zonal admin
     const unsubKeyReqs = databaseService.subscribeToZonalKeyRequests((requests) => {
       setPendingKeyRequests(requests.filter(r => r.status === 'pending'));
@@ -57,7 +49,6 @@ export default function DashboardScreen() {
     return () => {
       unsubAtt();
       unsubNotices();
-      unsubProxy();
       unsubKeyReqs();
     };
   }, [userSchoolCode]);
@@ -155,12 +146,6 @@ export default function DashboardScreen() {
       </div>
     );
   }
-
-  const myDutiesToday = proxyAssignments.filter(
-    p => p.date === today && (p.substituteTeacherId === user?.id || p.substituteTeacherName === user?.name)
-  );
-
-  const totalProxiesToday = proxyAssignments.filter(p => p.date === today).length;
 
   return (
     <div className="page">

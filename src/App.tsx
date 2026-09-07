@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppShell } from './components/AppShell';
+import { TeacherSubjectSetupModal } from './components/TeacherSubjectSetupModal';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -18,6 +19,7 @@ import ZonalAdminScreen from './screens/ZonalAdminScreen';
 import AdminLoginScreen from './screens/AdminLoginScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import './index.css';
+
 
 function LoadingScreen() {
   return (
@@ -47,8 +49,16 @@ function AppRoutes() {
 
   if (isLoading) return <LoadingScreen />;
 
+  // Show subject setup modal for teachers who haven't filled their subjects yet
+  const needsSubjectSetup =
+    user?.role === 'teacher' &&
+    !user.subjectSetupComplete &&
+    !user.subject;
+
   return (
-    <Routes>
+    <>
+      {needsSubjectSetup && <TeacherSubjectSetupModal />}
+      <Routes>
       {/* Public routes */}
       <Route
         path="/login"
@@ -177,6 +187,7 @@ function AppRoutes() {
       {/* Catch-all */}
       <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
     </Routes>
+    </>
   );
 }
 
