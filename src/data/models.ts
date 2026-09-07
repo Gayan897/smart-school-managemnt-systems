@@ -302,10 +302,133 @@ export interface StudentCorrelationProfile {
 export interface TimetableSlot {
   classRoom: string;
   dayOfWeek: number; // 1 = Mon, 5 = Fri
-  period: number;    // 1 to 7
+  period: number;    // 1 to 8
   subject: string;
   teacher: string;
+  teacherId?: string;
+  academicYear?: number;
+  startTime?: string;
+  endTime?: string;
 }
+
+export interface SLPeriodScheduleItem {
+  period: number;
+  label: string;
+  startTime: string; // e.g. "08:00 AM"
+  endTime: string;   // e.g. "08:40 AM"
+  durationMinutes: number;
+  isInterval?: boolean;
+}
+
+/**
+ * Official Sri Lankan Ministry of Education School Day Schedule
+ * Total duration: 8:00 AM to 1:30 PM (330 minutes)
+ * 8 Periods + 20-minute Interval strictly following Period 4
+ */
+export const SL_BELL_SCHEDULE: SLPeriodScheduleItem[] = [
+  { period: 1, label: 'Period 1', startTime: '08:00 AM', endTime: '08:40 AM', durationMinutes: 40 },
+  { period: 2, label: 'Period 2', startTime: '08:40 AM', endTime: '09:20 AM', durationMinutes: 40 },
+  { period: 3, label: 'Period 3', startTime: '09:20 AM', endTime: '10:00 AM', durationMinutes: 40 },
+  { period: 4, label: 'Period 4', startTime: '10:00 AM', endTime: '10:40 AM', durationMinutes: 40 },
+  // Interval after 4th period
+  { period: 0, label: 'Interval / Recess', startTime: '10:40 AM', endTime: '11:00 AM', durationMinutes: 20, isInterval: true },
+  { period: 5, label: 'Period 5', startTime: '11:00 AM', endTime: '11:40 AM', durationMinutes: 40 },
+  { period: 6, label: 'Period 6', startTime: '11:40 AM', endTime: '12:15 PM', durationMinutes: 35 },
+  { period: 7, label: 'Period 7', startTime: '12:15 PM', endTime: '12:50 PM', durationMinutes: 35 },
+  { period: 8, label: 'Period 8', startTime: '12:50 PM', endTime: '01:30 PM', durationMinutes: 40 },
+];
+
+export const SL_PERIOD_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+/**
+ * 8 Core Subjects in Sri Lankan Secondary / O-Level Schools (Grades 6–11)
+ * Weighted allocation for 40 periods/week (5 days x 8 periods)
+ */
+export interface SLCurriculumSubject {
+  id: string;
+  nameEn: string;
+  nameSi: string;
+  nameTa: string;
+  category: 'core' | 'language' | 'humanities' | 'practical' | 'aesthetic';
+  color: string;
+  weeklyPeriods: number; // Sums to 40 periods
+}
+
+export const SL_OL_8_SUBJECTS: SLCurriculumSubject[] = [
+  {
+    id: 'mathematics',
+    nameEn: 'Mathematics',
+    nameSi: 'ගණිතය',
+    nameTa: 'கணிதம்',
+    category: 'core',
+    color: '#3b82f6', // Blue
+    weeklyPeriods: 6,
+  },
+  {
+    id: 'science',
+    nameEn: 'Science',
+    nameSi: 'විද්‍යාව',
+    nameTa: 'அறிவியல்',
+    category: 'core',
+    color: '#10b981', // Emerald
+    weeklyPeriods: 6,
+  },
+  {
+    id: 'first_language',
+    nameEn: 'Sinhala / Tamil Language & Lit',
+    nameSi: 'මව්බස සහ සාහිත්‍යය',
+    nameTa: 'தாய்மொழியும் இலக்கியமும்',
+    category: 'language',
+    color: '#8b5cf6', // Purple
+    weeklyPeriods: 6,
+  },
+  {
+    id: 'english_language',
+    nameEn: 'English Language',
+    nameSi: 'ඉංග්‍රීසි භාෂාව',
+    nameTa: 'ஆங்கில மொழி',
+    category: 'language',
+    color: '#06b6d4', // Cyan
+    weeklyPeriods: 5,
+  },
+  {
+    id: 'religion',
+    nameEn: 'Religion (Buddhism / Christianity / Hinduism / Islam)',
+    nameSi: 'ආගම',
+    nameTa: 'மதம்',
+    category: 'humanities',
+    color: '#f59e0b', // Amber
+    weeklyPeriods: 4,
+  },
+  {
+    id: 'history',
+    nameEn: 'History',
+    nameSi: 'ඉතිහාසය',
+    nameTa: 'வரலாறு',
+    category: 'humanities',
+    color: '#ea580c', // Orange
+    weeklyPeriods: 4,
+  },
+  {
+    id: 'practical_studies',
+    nameEn: 'Practical Studies (Commerce / ICT / Agriculture)',
+    nameSi: 'ව්‍යවහාරික හා තාක්ෂණික විෂයයන්',
+    nameTa: 'நடைமுறை மற்றும் தொழில்நுட்பக் கல்வி',
+    category: 'practical',
+    color: '#14b8a6', // Teal
+    weeklyPeriods: 4,
+  },
+  {
+    id: 'aesthetic_health',
+    nameEn: 'Aesthetic & Health / PE',
+    nameSi: 'සෞන්දර්යය සහ සෞඛ්‍ය හා ශාරීරික අධ්‍යාපනය',
+    nameTa: 'அழகியல் மற்றும் உடற்கல்வி',
+    category: 'aesthetic',
+    color: '#ec4899', // Pink
+    weeklyPeriods: 5,
+  },
+];
+
 
 export type NoticeTargetRole = 'all' | 'teacher' | 'principal' | 'zonal_admin' | 'parent' | 'student';
 

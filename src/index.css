@@ -558,7 +558,7 @@ select.form-control { cursor: pointer; }
 .timetable-cell {
   background: var(--bg-card);
   padding: 8px 10px;
-  min-height: 64px;
+  min-height: 74px;
   font-size: 12px;
   display: flex;
   flex-direction: column;
@@ -580,8 +580,98 @@ select.form-control { cursor: pointer; }
   background: rgba(37,99,235,0.08);
   border-left: 2px solid var(--primary);
 }
-.timetable-slot-subject { font-weight: 600; color: var(--text-primary); }
+.timetable-slot-subject { font-weight: 600; color: var(--text-primary); font-size: 12px; }
 .timetable-slot-teacher { color: var(--text-muted); font-size: 11px; }
+
+/* ─── Timetable Interval / Recess Row ──────────────────────────────────── */
+.timetable-interval-row {
+  grid-column: 1 / -1;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.18), rgba(245, 158, 11, 0.12));
+  border-top: 1px dashed rgba(245, 158, 11, 0.4);
+  border-bottom: 1px dashed rgba(245, 158, 11, 0.4);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-weight: 700;
+  color: #d97706;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+[data-theme='dark'] .timetable-interval-row {
+  color: #fbbf24;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.22), rgba(245, 158, 11, 0.15));
+}
+
+.period-time-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* ─── Timetable Print Styling (A4 Landscape MoE Format) ─────────────────── */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .sidebar, .top-header, .page-header, .timetable-action-bar, .modal-overlay, button, select, input {
+    display: none !important;
+  }
+  .main-area {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .page {
+    padding: 0 !important;
+  }
+  .card {
+    border: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  .timetable-print-sheet {
+    display: block !important;
+    width: 100% !important;
+    padding: 15px !important;
+    color: #000 !important;
+  }
+  .timetable-grid {
+    border: 1.5px solid #000 !important;
+    background: #fff !important;
+  }
+  .timetable-cell {
+    border: 1px solid #999 !important;
+    background: #fff !important;
+    color: #000 !important;
+    min-height: 52px !important;
+  }
+  .timetable-cell.header {
+    background: #f0f0f0 !important;
+    color: #000 !important;
+    font-weight: bold !important;
+  }
+  .timetable-interval-row {
+    background: #fff3cd !important;
+    border: 1px solid #ffeeba !important;
+    color: #856404 !important;
+  }
+  .timetable-slot-subject {
+    color: #000 !important;
+    font-weight: bold !important;
+  }
+  .timetable-slot-teacher {
+    color: #333 !important;
+  }
+}
 
 /* ─── Live Sync Pulse Animation ─────────────────────────────────────────── */
 @keyframes pulse-live {
@@ -599,3 +689,4 @@ select.form-control { cursor: pointer; }
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+

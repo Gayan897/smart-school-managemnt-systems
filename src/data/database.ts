@@ -914,6 +914,123 @@ export const databaseService = {
     const snapshot = await getDocs(timetableCol);
     return snapshot.docs.map((doc) => doc.data());
   },
+
+  /**
+   * Batch saves timetable slots to Firestore.
+   */
+  async saveTimetableSlotsBatch(slots: TimetableSlot[]): Promise<void> {
+    if (slots.length === 0) return;
+    const batch = writeBatch(db);
+    for (const s of slots) {
+      const id = `${s.classRoom}_${s.dayOfWeek}_${s.period}`;
+      batch.set(doc(timetableCol, id), cleanData(s), { merge: true });
+    }
+    await batch.commit();
+  },
+
+  /**
+   * Deletes all timetable slots for a specific class.
+   */
+  async deleteClassTimetable(classRoom: string): Promise<void> {
+    const q = query(timetableCol, where('classRoom', '==', classRoom));
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  },
+
+  /**
+   * Subscribes to real-time updates of the timetable collection.
+   */
+  subscribeToTimetable(
+    callback: (slots: TimetableSlot[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
+    return onSnapshot(
+      timetableCol,
+      (snap) => {
+        const slots = snap.docs.map((d) => d.data());
+        callback(slots);
+      },
+      (err) => {
+        console.error('[EduNexus] subscribeToTimetable error:', err);
+        onError?.(err);
+      }
+    );
+  },
+
+  /**
+   * Publishes an official timetable broadcast notice to teachers, students, and parents.
+   */
+  async publishTimetableNotice(params: {
+    classRoom: string;
+    className: string;
+    academicYear: number;
+    authorName: string;
+    schoolName?: string;
+    censusCode?: string;
+    messageNote?: string;
+  }): Promise<void> {
+    const { classRoom, className, academicYear, authorName, schoolName, censusCode, messageNote } = params;
+    const nowIso = new Date().toISOString();
+
+    // 1. Broadcast system notice
+    const noticeId = `notice_timetable_${classRoom}_${academicYear}_${Date.now()}`;
+    const notice: Notice = {
+      id: noticeId,
+      title: `📅 Academic Timetable Published: ${className} (${academicYear})`,
+      body: `The official school timetable for ${className} (Academic Year ${academicYear}) has been generated and published by Principal ${authorName}.\n\n` +
+        `• School Hours: 08:00 AM – 01:30 PM (8 Periods)\n` +
+        `• Interval: 10:40 AM – 11:00 AM (After Period 4)\n` +
+        `• Curriculum: 8 National Curriculum Subjects / Stream Allocation\n` +
+        (messageNote ? `\nNote from Principal: "${messageNote}"\n` : '') +
+        `\nPlease review the complete weekly schedule in the Timetable portal.`,
+      date: nowIso,
+      category: 'Academic',
+      targetRole: 'all',
+      authorName: authorName || 'Principal Office',
+      authorRole: 'principal',
+      priority: 'high',
+      schoolCensusCode: censusCode,
+      schoolName: schoolName,
+    };
+    await setDoc(doc(noticesCol, notice.id), cleanData(notice));
+
+    // 2. Add in-app notifications for students of that classroom
+    try {
+      const q = query(studentsCol, where('classRoom', '==', classRoom));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => {
+          const stu = d.data();
+          const pNotifId = `pnotif_tt_${stu.id}_${Date.now()}`;
+          const parentNotif: ParentNotification = {
+            id: pNotifId,
+            studentId: stu.id,
+            studentName: stu.name,
+            date: new Date().toISOString().slice(0, 10),
+            status: 'present',
+            title: `📅 New Timetable Active: Class ${className}`,
+            message: `Official Academic Year ${academicYear} timetable is now in effect for ${stu.name}. Daily sessions run 08:00 AM – 01:30 PM with Interval at 10:40 AM.`,
+            timestamp: nowIso,
+            read: false,
+            teacherName: authorName || 'Principal Office',
+            type: 'general',
+            priority: 'normal',
+            parentContact: stu.parentContact,
+            actionRequired: false,
+          };
+          batch.set(doc(parentNotificationsCol, pNotifId), cleanData(parentNotif));
+        });
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn('Failed to dispatch student/parent in-app notifications:', e);
+    }
+  },
+
   async getNotices(): Promise<Notice[]> {
     const snapshot = await getDocs(noticesCol);
     if (snapshot.empty) {
