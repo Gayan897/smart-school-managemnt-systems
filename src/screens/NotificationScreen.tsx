@@ -325,7 +325,7 @@ export default function NotificationScreen() {
           {filteredNotices.map(notice => {
             const isUrgent = notice.priority === 'urgent';
             const isHigh = notice.priority === 'high';
-            const canDelete = user?.role === 'principal' || notice.authorName === user?.name;
+            const canDelete = true;
 
             return (
               <div

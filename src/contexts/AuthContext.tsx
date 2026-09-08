@@ -36,6 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             parsed.schoolCensusCode = 'ZONAL-MOE';
             parsed.schoolName = 'Colombo / Homagama Zonal Education Office';
           }
+          if (parsed.role === 'teacher' && parsed.id) {
+            if (localStorage.getItem(`sams_subject_seen_${parsed.id}`) === 'true') {
+              parsed.subjectSetupComplete = true;
+            }
+          }
           setUser(parsed);
         }
       } catch { /* ignore */ }
@@ -93,12 +98,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    if (found.role === 'teacher' && found.id) {
+      if (localStorage.getItem(`sams_subject_seen_${found.id}`) === 'true') {
+        found.subjectSetupComplete = true;
+      }
+    }
+
     setUser(found);
     localStorage.setItem('edunexus_user', JSON.stringify(found));
     return found;
   }
 
   function updateUserSession(updatedUser: User) {
+    if (updatedUser?.role === 'teacher' && updatedUser?.id && updatedUser.subjectSetupComplete) {
+      localStorage.setItem(`sams_subject_seen_${updatedUser.id}`, 'true');
+    }
     setUser(updatedUser);
     localStorage.setItem('edunexus_user', JSON.stringify(updatedUser));
   }

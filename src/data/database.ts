@@ -155,8 +155,10 @@ export const databaseService = {
     const userRef = doc(usersCol, userId);
     const userSnapshot = await getDocs(query(usersCol, where('id', '==', userId), limit(1)));
     let currentUser: User | null = null;
+    let targetDocRef = userRef;
     if (!userSnapshot.empty) {
       currentUser = userSnapshot.docs[0].data();
+      targetDocRef = userSnapshot.docs[0].ref;
     }
 
     const { subject, classRoom, otherSubjects, ...userUpdates } = updates;
@@ -169,17 +171,24 @@ export const databaseService = {
       ...(classRoom !== undefined ? { classRoom } : {}),
     };
 
-    // Update users collection
-    await setDoc(userRef, cleanData(fullUserUpdate), { merge: true });
+    // Update users collection using target document reference
+    await setDoc(targetDocRef, cleanData(fullUserUpdate), { merge: true });
+    if (targetDocRef.id !== userId) {
+      try {
+        await setDoc(userRef, cleanData(fullUserUpdate), { merge: true });
+      } catch (e) {
+        console.warn('Failed to sync userRef with userId:', e);
+      }
+    }
 
     // Update teachers collection if applicable
-    if (currentUser?.role === 'teacher' || subject !== undefined || classRoom !== undefined) {
+    if (currentUser?.role === 'teacher' || updates.role === 'teacher' || subject !== undefined || classRoom !== undefined) {
       const teacherRef = doc(teachersCol, userId);
       await setDoc(teacherRef, cleanData({
-        name: updates.name,
-        subject,
-        otherSubjects,
-        classRoom,
+        name: updates.name || currentUser?.name,
+        ...(subject !== undefined ? { subject } : {}),
+        ...(otherSubjects !== undefined ? { otherSubjects } : {}),
+        ...(classRoom !== undefined ? { classRoom } : {}),
       }), { merge: true });
     }
 
@@ -191,6 +200,26 @@ export const databaseService = {
     return updatedUser;
   },
 
+  async enrichTeacherUser(u: User): Promise<User> {
+    if (u.role === 'teacher') {
+      try {
+        const tDoc = await getDoc(doc(teachersCol, u.id));
+        if (tDoc.exists()) {
+          const tData = tDoc.data();
+          if (tData.subject && tData.subject !== 'Not assigned') {
+            u.subject = u.subject || tData.subject;
+            u.subjectSetupComplete = true;
+          }
+          if (tData.otherSubjects && !u.otherSubjects) {
+            u.otherSubjects = tData.otherSubjects;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not fetch teacher extra info:', e);
+      }
+    }
+    return u;
+  },
 
   async getUserByUsername(username: string): Promise<User | null> {
     const clean = username.trim();
@@ -214,6 +243,7 @@ export const databaseService = {
           console.warn('Failed to update verification status in firestore:', e);
         }
       }
+      await this.enrichTeacherUser(u);
       return u;
     }
 
@@ -230,6 +260,7 @@ export const databaseService = {
           console.warn('Failed to update verification status in firestore:', e);
         }
       }
+      await this.enrichTeacherUser(u);
       return u;
     }
 
@@ -243,7 +274,9 @@ export const databaseService = {
       const q = query(usersCol, where('nicNumber', '==', clean), limit(1));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        return snapshot.docs[0].data();
+        const u = snapshot.docs[0].data();
+        await this.enrichTeacherUser(u);
+        return u;
       }
     } catch (e) {
       console.warn('Error querying user by NIC:', e);

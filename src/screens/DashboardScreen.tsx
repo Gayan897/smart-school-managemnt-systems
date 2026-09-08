@@ -4,7 +4,7 @@ import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserChec
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { isNoticeRelevantToUser, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ZonalKeyRequest } from '../data/models';
+import { isNoticeRelevantToUser, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ZonalKeyRequest, type SchoolClass } from '../data/models';
 
 export default function DashboardScreen() {
   const { user, language } = useAuth();
@@ -14,20 +14,23 @@ export default function DashboardScreen() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [pendingKeyRequests, setPendingKeyRequests] = useState<ZonalKeyRequest[]>([]);
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [loading, setLoading] = useState(true);
 
   const userSchoolCode = user?.role === 'zonal_admin' ? undefined : user?.schoolCensusCode;
 
   useEffect(() => {
-    // Fetch students, teachers, leave requests once
+    // Fetch students, teachers, leave requests, classes once
     Promise.all([
       databaseService.getStudents(userSchoolCode),
       databaseService.getTeachers(userSchoolCode),
       databaseService.getLeaveRequests(userSchoolCode),
-    ]).then(([s, tc, l]) => {
+      databaseService.getClasses(),
+    ]).then(([s, tc, l, cls]) => {
       setStudents(s);
       setTeachers(tc);
       setLeaveReqs(l);
+      setClasses(cls || []);
     });
 
     // Real-time attendance subscription
@@ -76,6 +79,29 @@ export default function DashboardScreen() {
     : teachers.filter(t => t.schoolCensusCode === currentSchoolCode);
 
   const isTeacher = user?.role === 'teacher';
+
+  const teacherObj = teachers.find(t =>
+    (user?.id && t.id === user.id) ||
+    (user?.name && t.name.toLowerCase() === user.name.toLowerCase()) ||
+    (user?.username && t.id === user.username)
+  );
+
+  const homeroomClassObj = classes.find(c =>
+    (user?.id && c.homeroomTeacherId === user.id) ||
+    (user?.name && c.homeroomTeacherName?.toLowerCase() === user.name.toLowerCase())
+  );
+
+  const studentObj = (user?.studentId || user?.admissionNumber)
+    ? students.find(s => s.id === user.studentId || (user.admissionNumber && s.admissionNumber === user.admissionNumber))
+    : undefined;
+
+  const rawClass =
+    user?.classRoom ||
+    (teacherObj?.classRoom && teacherObj.classRoom !== 'Not assigned' ? teacherObj.classRoom : undefined) ||
+    homeroomClassObj?.id ||
+    studentObj?.classRoom;
+
+  const assignedClassRoom = rawClass && rawClass !== 'Not assigned' ? rawClass : null;
 
   const relevantNotices = notices
     .filter(n => {
@@ -151,11 +177,44 @@ export default function DashboardScreen() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1 className="page-title">{t('welcome', language)}, {user?.name?.split(' ')[0] ?? ''}! </h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <span>{t('welcome', language)}, {user?.name?.split(' ')[0] ?? ''}!</span>
+            {assignedClassRoom && (
+              <span
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(2, 132, 199, 0.12)',
+                  color: 'var(--primary)',
+                  border: '1px solid rgba(2, 132, 199, 0.28)',
+                  letterSpacing: '0.2px',
+                }}
+              >
+                <GraduationCap size={15} />
+                {assignedClassRoom.toLowerCase().startsWith('class') ? assignedClassRoom : `Class ${assignedClassRoom}`}
+              </span>
+            )}
+          </h1>
           {user?.schoolName && user.role !== 'zonal_admin' && (
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span>🏫 {user.schoolName}</span>
               {user.schoolCensusCode && <span style={{ opacity: 0.8 }}>(Census Code: {user.schoolCensusCode})</span>}
+              {assignedClassRoom && (
+                <>
+                  <span style={{ opacity: 0.4 }}>•</span>
+                  <span>🏛️ {t('assignedClass', language)}: <strong>{assignedClassRoom}</strong></span>
+                </>
+              )}
+            </div>
+          )}
+          {!user?.schoolName && assignedClassRoom && (
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>🏛️ {t('assignedClass', language)}: <strong>{assignedClassRoom}</strong></span>
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>

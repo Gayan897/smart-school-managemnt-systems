@@ -2,12 +2,12 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Save, Eye, Trophy, Award, GraduationCap, Sparkles, Check, BookOpen,
   UserCheck, Layers, FileSpreadsheet, BarChart2, RefreshCw, AlertCircle,
-  FileDown, Download, Medal, Calendar, Search, CheckCircle2
+  FileDown, Download, Medal, Calendar, Search, CheckCircle2, Plus, Sliders
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import type { Student, SchoolClass, TermMark, AttendanceRecord } from '../data/models';
+import type { Student, SchoolClass, TermMark, AttendanceRecord, Teacher } from '../data/models';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import StudentProfileModal from '../components/StudentProfileModal';
 import OfflineBanner from '../components/OfflineBanner';
@@ -79,6 +79,7 @@ export default function PerformanceScreen() {
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [marks, setMarks] = useState<TermMark[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -115,6 +116,7 @@ export default function PerformanceScreen() {
       databaseService.getTeachers(),
     ]).then(([cls, tc]) => {
       setClasses(cls);
+      setTeachers(tc || []);
 
       if (!isPrincipal && cls.length > 0) {
         const teacherObj = tc?.find(t => t.id === user?.id || (user?.name && t.name.toLowerCase() === user.name.toLowerCase()));
@@ -514,6 +516,50 @@ export default function PerformanceScreen() {
 
   const COLORS = ['#0284c7', '#0d9488', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899'];
 
+  // Predefined + any custom / school-specific subjects found in marks or teachers
+  const allAvailableSubjects = useMemo(() => {
+    const knownIds = new Set(SRI_LANKA_SUBJECTS.map(s => s.id.toLowerCase()));
+    const customList: SubjectOption[] = [];
+
+    // Check marks
+    marks.forEach(m => {
+      if (m.subject && !knownIds.has(m.subject.toLowerCase())) {
+        knownIds.add(m.subject.toLowerCase());
+        customList.push({
+          id: m.subject,
+          nameEn: m.subject,
+          category: 'elective',
+        });
+      }
+    });
+
+    // Check teachers
+    teachers.forEach(t => {
+      if (t.subject && t.subject !== 'Not assigned' && !knownIds.has(t.subject.toLowerCase())) {
+        knownIds.add(t.subject.toLowerCase());
+        customList.push({
+          id: t.subject,
+          nameEn: t.subject,
+          category: 'elective',
+        });
+      }
+      if (t.otherSubjects) {
+        t.otherSubjects.forEach(sub => {
+          if (sub && !knownIds.has(sub.toLowerCase())) {
+            knownIds.add(sub.toLowerCase());
+            customList.push({
+              id: sub,
+              nameEn: sub,
+              category: 'elective',
+            });
+          }
+        });
+      }
+    });
+
+    return [...SRI_LANKA_SUBJECTS, ...customList];
+  }, [marks, teachers]);
+
   if (loading) {
     return (
       <div className="page" style={{ display: 'flex', justifyContent: 'center', paddingTop: '80px' }}>
@@ -554,6 +600,26 @@ export default function PerformanceScreen() {
               <label className="form-label">{t('term', language)}</label>
               <select className="form-control" value={selectedTerm} onChange={e => setSelectedTerm(Number(e.target.value))}>
                 {TERMS.map(tm => <option key={tm} value={tm}>{t('term', language)} {tm}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Subject</label>
+              <select className="form-control" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}>
+                <optgroup label="Core O/L Compulsory Subjects">
+                  {allAvailableSubjects.filter(s => s.category === 'core').map(s => (
+                    <option key={s.id} value={s.id}>📘 {s.nameEn}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Elective & Category Subjects">
+                  {allAvailableSubjects.filter(s => s.category === 'elective').map(s => (
+                    <option key={s.id} value={s.id}>📙 {s.nameEn}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Advanced Level (A/L) Stream Subjects">
+                  {allAvailableSubjects.filter(s => s.category === 'al').map(s => (
+                    <option key={s.id} value={s.id}>🎓 {s.nameEn}</option>
+                  ))}
+                </optgroup>
               </select>
             </div>
           </div>
@@ -792,7 +858,7 @@ export default function PerformanceScreen() {
           onClick={() => setActiveTab('chart')}
           style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          <BarChart2 size={15} /> Performance Radar Chart
+          <BarChart2 size={15} /> Performance Chart
         </button>
       </div>
 
@@ -811,17 +877,17 @@ export default function PerformanceScreen() {
                 style={{ fontWeight: 600, fontSize: '14px' }}
               >
                 <optgroup label="Core O/L Compulsory Subjects (6 Mains)">
-                  {SRI_LANKA_SUBJECTS.filter(s => s.category === 'core').map(s => (
+                  {allAvailableSubjects.filter(s => s.category === 'core').map(s => (
                     <option key={s.id} value={s.id}>📘 {s.nameEn}</option>
                   ))}
                 </optgroup>
                 <optgroup label="Elective & Category Subjects (ICT, Lit, Civics, Commerce, etc.)">
-                  {SRI_LANKA_SUBJECTS.filter(s => s.category === 'elective').map(s => (
+                  {allAvailableSubjects.filter(s => s.category === 'elective').map(s => (
                     <option key={s.id} value={s.id}>📙 {s.nameEn}</option>
                   ))}
                 </optgroup>
                 <optgroup label="Advanced Level (A/L) Stream Subjects">
-                  {SRI_LANKA_SUBJECTS.filter(s => s.category === 'al').map(s => (
+                  {allAvailableSubjects.filter(s => s.category === 'al').map(s => (
                     <option key={s.id} value={s.id}>🎓 {s.nameEn}</option>
                   ))}
                 </optgroup>
@@ -1766,16 +1832,68 @@ export default function PerformanceScreen() {
         </div>
       )}
 
-      {/* ─── TAB 4: PERFORMANCE RADAR CHART ─── */}
+      {/* ─── TAB 4: PERFORMANCE CHART ─── */}
       {activeTab === 'chart' && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">{selectedSubject} Performance Chart (Class {selectedClass} - Term {selectedTerm})</h3>
+        <div className="card" style={{ padding: '24px' }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px',
+            paddingBottom: '16px',
+            marginBottom: '20px',
+            borderBottom: '1px solid var(--border)'
+          }}>
+            <div>
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '18px', margin: 0 }}>
+                <BarChart2 size={20} style={{ color: 'var(--primary)' }} />
+                <span>{selectedSubject} Performance Chart</span>
+                <span className="badge badge-primary" style={{ fontSize: '12px', fontWeight: 600 }}>
+                  Class {selectedClass} • Term {selectedTerm}
+                </span>
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
+                Individual student mark distribution and score visualization for {selectedSubject}.
+              </p>
+            </div>
+
+            {/* Subject Selector to choose other subjects */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Select Subject:
+              </label>
+              <select
+                className="form-control"
+                value={selectedSubject}
+                onChange={e => setSelectedSubject(e.target.value)}
+                style={{ fontSize: '14px', fontWeight: 600, minWidth: '240px', padding: '8px 14px' }}
+              >
+                <optgroup label="Core O/L Compulsory Subjects (6 Mains)">
+                  {allAvailableSubjects.filter(s => s.category === 'core').map(s => (
+                    <option key={s.id} value={s.id}>📘 {s.nameEn}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Elective & Category Subjects (ICT, Commerce, Lit, etc.)">
+                  {allAvailableSubjects.filter(s => s.category === 'elective').map(s => (
+                    <option key={s.id} value={s.id}>📙 {s.nameEn}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Advanced Level (A/L) Stream Subjects">
+                  {allAvailableSubjects.filter(s => s.category === 'al').map(s => (
+                    <option key={s.id} value={s.id}>🎓 {s.nameEn}</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
           </div>
+
           {chartData.length === 0 ? (
-            <div className="empty-state"><p>{t('noData', language)}</p></div>
+            <div className="empty-state" style={{ padding: '50px 20px', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-muted)' }}>{t('noData', language)}</p>
+            </div>
           ) : (
-            <div className="chart-container" style={{ height: '380px' }}>
+            <div className="chart-container" style={{ height: '400px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 20, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />

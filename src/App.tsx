@@ -49,11 +49,15 @@ function AppRoutes() {
 
   if (isLoading) return <LoadingScreen />;
 
-  // Show subject setup modal for teachers who haven't filled their subjects yet
+  // Show subject setup modal only once for teachers who haven't filled or been shown subjects yet
+  const hasSeenSubjectPrompt =
+    Boolean(user?.subjectSetupComplete) ||
+    (user?.id ? localStorage.getItem(`sams_subject_seen_${user.id}`) === 'true' : false) ||
+    Boolean(user?.subject && user.subject !== 'Not assigned');
+
   const needsSubjectSetup =
     user?.role === 'teacher' &&
-    !user.subjectSetupComplete &&
-    !user.subject;
+    !hasSeenSubjectPrompt;
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BookOpen, CheckCircle2, Plus, X, GraduationCap, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { databaseService } from '../data/database';
@@ -46,18 +46,47 @@ const ALL_SL_SUBJECTS = [
   'Dancing',
 ];
 
-export function TeacherSubjectSetupModal() {
+export function TeacherSubjectSetupModal({ onClose }: { onClose?: () => void }) {
   const { user, updateUserSession } = useAuth();
+  const [isOpen, setIsOpen] = useState(true);
   const [mainSubject, setMainSubject] = useState('');
   const [otherSubjects, setOtherSubjects] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Once this modal appears for this teacher, mark it immediately in localStorage and Firestore
+  // so that subsequent logins or page reloads will NEVER ask again.
+  useEffect(() => {
+    if (user?.id) {
+      try {
+        localStorage.setItem(`sams_subject_seen_${user.id}`, 'true');
+        databaseService.updateUserProfile(user.id, {
+          subjectSetupComplete: true,
+        }).catch((err) => {
+          console.warn('Could not persist subjectSetupComplete flag:', err);
+        });
+      } catch (err) {
+        console.warn('Error recording subject setup status:', err);
+      }
+    }
+  }, [user?.id]);
 
   function toggleOtherSubject(sub: string) {
     if (sub === mainSubject) return; // can't add main subject as "other"
     setOtherSubjects((prev) =>
       prev.includes(sub) ? prev.filter((s) => s !== sub) : [...prev, sub]
     );
+  }
+
+  function handleDismiss() {
+    if (user) {
+      try {
+        localStorage.setItem(`sams_subject_seen_${user.id}`, 'true');
+      } catch {}
+      updateUserSession({ ...user, subjectSetupComplete: true });
+    }
+    setIsOpen(false);
+    onClose?.();
   }
 
   async function handleSave() {
@@ -69,18 +98,25 @@ export function TeacherSubjectSetupModal() {
     setSaving(true);
     setError('');
     try {
+      try {
+        localStorage.setItem(`sams_subject_seen_${user.id}`, 'true');
+      } catch {}
       const updated = await databaseService.updateUserProfile(user.id, {
         subject: mainSubject,
         otherSubjects,
         subjectSetupComplete: true,
       });
       updateUserSession({ ...updated, subjectSetupComplete: true, subject: mainSubject, otherSubjects });
+      setIsOpen(false);
+      onClose?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
   }
+
+  if (!isOpen) return null;
 
   // Subject color chip helper (uses SL subject colors if defined)
   function getSubjectColor(sub: string) {
@@ -118,13 +154,41 @@ export function TeacherSubjectSetupModal() {
         {/* Header */}
         <div
           style={{
+            position: 'relative',
             background: 'linear-gradient(135deg, #4f46e5 0%, #0d9488 100%)',
             padding: '28px 28px 24px',
             borderRadius: '20px 20px 0 0',
             color: '#fff',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={handleDismiss}
+            title="Close"
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255, 255, 255, 0.2)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '34px',
+              height: '34px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.35)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)')}
+          >
+            <X size={18} />
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', paddingRight: '40px' }}>
             <div
               style={{
                 width: '48px',
@@ -400,41 +464,61 @@ export function TeacherSubjectSetupModal() {
             </div>
           )}
 
-          {/* Save Button */}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !mainSubject}
-            style={{
-              width: '100%',
-              padding: '14px',
-              borderRadius: '12px',
-              border: 'none',
-              background: mainSubject
-                ? 'linear-gradient(135deg, #4f46e5 0%, #0d9488 100%)'
-                : 'var(--border)',
-              color: mainSubject ? '#fff' : 'var(--text-muted)',
-              fontSize: '15px',
-              fontWeight: 700,
-              cursor: mainSubject ? 'pointer' : 'not-allowed',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              transition: 'all 0.2s ease',
-              boxShadow: mainSubject ? '0 6px 20px rgba(79, 70, 229, 0.35)' : 'none',
-            }}
-          >
-            {saving ? (
-              <span className="spinner" />
-            ) : (
-              <CheckCircle2 size={20} />
-            )}
-            {saving ? 'Saving...' : 'Save My Teaching Subjects & Continue'}
-          </button>
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              style={{
+                flex: 1,
+                padding: '14px',
+                borderRadius: '12px',
+                border: '1.5px solid var(--border)',
+                background: 'var(--bg-hover)',
+                color: 'var(--text-secondary)',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              Skip for Now
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !mainSubject}
+              style={{
+                flex: 2,
+                padding: '14px',
+                borderRadius: '12px',
+                border: 'none',
+                background: mainSubject
+                  ? 'linear-gradient(135deg, #4f46e5 0%, #0d9488 100%)'
+                  : 'var(--border)',
+                color: mainSubject ? '#fff' : 'var(--text-muted)',
+                fontSize: '15px',
+                fontWeight: 700,
+                cursor: mainSubject ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'all 0.2s ease',
+                boxShadow: mainSubject ? '0 6px 20px rgba(79, 70, 229, 0.35)' : 'none',
+              }}
+            >
+              {saving ? (
+                <span className="spinner" />
+              ) : (
+                <CheckCircle2 size={20} />
+              )}
+              {saving ? 'Saving...' : 'Save My Teaching Subjects'}
+            </button>
+          </div>
 
-          <p style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', marginTop: '12px' }}>
-            You can update your subjects anytime from your Profile page.
+          <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginTop: '14px' }}>
+            This prompt will not be shown again on subsequent logins. You can configure or change your subjects anytime in your <strong>Profile</strong>.
           </p>
         </div>
       </div>
