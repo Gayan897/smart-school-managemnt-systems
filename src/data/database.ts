@@ -94,7 +94,7 @@ export const PERMANENT_ZONAL_ADMIN: User = {
   name: 'Zonal Master Administrator',
   role: 'zonal_admin',
   schoolCensusCode: 'ZONAL-MOE',
-  schoolName: 'Colombo / Homagama Zonal Education Office',
+  schoolName: 'Colombo Zonal Education Office',
   nicNumber: '198000000000',
   sleasNumber: 'SLEAS-DIR-001',
 };
@@ -399,7 +399,7 @@ export const databaseService = {
         setDoc(doc(studentsCol, s.id), cleanData({
           isStudentRegistered: s.isStudentRegistered,
           isParentRegistered: s.isParentRegistered,
-        }), { merge: true }).catch(() => {});
+        }), { merge: true }).catch(() => { });
       }
     }
 
@@ -1393,7 +1393,7 @@ export const databaseService = {
     }
 
     if (school.zonalSecretKey.trim().toUpperCase() !== secretKey.trim().toUpperCase()) {
-      return { valid: false, error: 'Invalid Zonal Master Security Key provided. Please contact Homagama / Colombo Zonal Education Office.' };
+      return { valid: false, error: 'Invalid Zonal Master Security Key provided. Please contactColombo Zonal Education Office.' };
     }
 
     return { valid: true, school };

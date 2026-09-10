@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else if (parsed) {
           if (!parsed.schoolCensusCode && parsed.role === 'zonal_admin') {
             parsed.schoolCensusCode = 'ZONAL-MOE';
-            parsed.schoolName = 'Colombo / Homagama Zonal Education Office';
+            parsed.schoolName = 'Colombo  Zonal Education Office';
           }
           if (parsed.role === 'teacher' && parsed.id) {
             if (localStorage.getItem(`sams_subject_seen_${parsed.id}`) === 'true') {
@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!found.schoolCensusCode && found.role === 'zonal_admin') {
       found.schoolCensusCode = 'ZONAL-MOE';
-      found.schoolName = 'Colombo / Homagama Zonal Education Office';
+      found.schoolName = 'Colombo Zonal Education Office';
     }
 
     // Teacher NIC Verification Check

@@ -241,7 +241,7 @@ export default function SignupScreen() {
         nicFrontImage: reqNicFront,
         nicBackImage: reqNicBack,
       });
-      setRequestSuccessMsg(`✅ Request submitted successfully! The Homagama / Colombo Zonal Education Office and Admin have been notified.`);
+      setRequestSuccessMsg(`✅ Request submitted successfully! The Colombo Zonal Education Office and Admin have been notified.`);
     } catch (err: unknown) {
       console.error('Failed to submit key request:', err);
       setModalError(err instanceof Error ? err.message : 'Failed to submit key request. Please check your internet connection.');
@@ -364,7 +364,7 @@ export default function SignupScreen() {
         name: name.trim(),
         role,
         schoolCensusCode: role === 'zonal_admin' ? 'ZONAL-MOE' : selectedSchoolCode,
-        schoolName: role === 'zonal_admin' ? 'Colombo / Homagama Zonal Education Office' : (selectedSchool?.name || 'Mahinda Rajapaksha College'),
+        schoolName: role === 'zonal_admin' ? 'Colombo Zonal Education Office' : (selectedSchool?.name || 'Mahinda Rajapaksha College'),
         ...(email.trim() || inviteEmail ? { email: email.trim() || inviteEmail } : {}),
         ...(nicNumber.trim() ? { nicNumber: nicNumber.trim().toUpperCase() } : {}),
         ...(sleasNumber.trim() ? { sleasNumber: sleasNumber.trim() } : {}),
@@ -511,7 +511,7 @@ export default function SignupScreen() {
           <div className="auth-features" style={{ marginTop: '20px' }}>
             <div className="auth-feature">
               <Building2 size={16} color="#38bdf8" />
-              <span>Colombo District & Homagama Zone Portal</span>
+              <span>Colombo District Zone Portal</span>
             </div>
             <div className="auth-feature">
               <ShieldCheck size={16} color="#34d399" />
@@ -960,7 +960,7 @@ export default function SignupScreen() {
             ) : (
               <form onSubmit={handleSendKeyRequest}>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: 1.4 }}>
-                  Submit your appointment details directly to the <strong>Homagama / Colombo Zonal Education Office</strong>. The Admin will verify and dispatch your key.
+                  Submit your appointment details directly to the <strong> Colombo Zonal Education Office</strong>. The Admin will verify and dispatch your key.
                 </p>
 
                 <div className="form-group" style={{ marginBottom: '10px' }}>

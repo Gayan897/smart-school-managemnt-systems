@@ -201,7 +201,7 @@ export default function ZonalAdminScreen() {
 
   function triggerNativeEmail(school: GovernmentSchool, email: string, inviteUrl: string) {
     const subject = `🏛️ [OFFICIAL DISPATCH] EduNexus Portal Authorization Key - ${school.name}`;
-    const body = `Dear Principal,\n\nOfficial Authorization Details for EduNexus (Smart Academic & Governance System):\n\nSchool: ${school.name}\nCensus Code: ${school.censusCode}\nZonal Master Security Key: ${school.zonalSecretKey}\n\nPlease click the official registration link below to activate your Principal account:\n${inviteUrl}\n\nRegards,\nHomagama / Colombo Zonal Education Office\nMinistry of Education, Sri Lanka`;
+    const body = `Dear Principal,\n\nOfficial Authorization Details for EduNexus (Smart Academic & Governance System):\n\nSchool: ${school.name}\nCensus Code: ${school.censusCode}\nZonal Master Security Key: ${school.zonalSecretKey}\n\nPlease click the official registration link below to activate your Principal account:\n${inviteUrl}\n\nRegards,\n Colombo Zonal Education Office\nMinistry of Education, Sri Lanka`;
 
     window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
@@ -264,7 +264,7 @@ export default function ZonalAdminScreen() {
         date: new Date().toISOString(),
         category: noticeCategory,
         targetRole: noticeTarget,
-        authorName: user?.name || 'Zonal Education Office (Homagama/Colombo)',
+        authorName: user?.name || 'Zonal Education Office (Colombo)',
         authorRole: 'zonal_admin',
         priority: 'urgent',
       };
@@ -298,7 +298,7 @@ export default function ZonalAdminScreen() {
             Zonal Education Office Command Center
           </h1>
           <p className="page-subtitle">
-            Ministry of Education • Colombo District & Homagama Educational Zone Overview
+            Ministry of Education • Colombo District Educational Zone Overview
           </p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={loadSchools} disabled={loading}>
@@ -885,7 +885,7 @@ export default function ZonalAdminScreen() {
               </h2>
             </div>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-              Send official Ministry notifications directly to School Principals across the Homagama / Colombo zone.
+              Send official Ministry notifications directly to School Principals across the Colombo zone.
             </p>
 
             {noticeSuccess && (

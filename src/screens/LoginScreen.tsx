@@ -360,7 +360,7 @@ export default function LoginScreen() {
                   <ShieldCheck size={16} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#0284c7' }} />
                 </div>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                  Issued by Homagama / Colombo Zonal Education Office
+                  Issued by Colombo Zonal Education Office
                 </span>
               </div>
 
