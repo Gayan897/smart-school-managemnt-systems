@@ -62,11 +62,11 @@ export interface QueuedOperation {
   payload: QueuedPayload;
 }
 
-// ─── Storage Key ─────────────────────────────────────────────────────────────
+//Storage Key 
 
 const STORAGE_KEY = 'sams_offline_queue';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+//Helpers
 
 function readQueue(): QueuedOperation[] {
   try {

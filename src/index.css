@@ -97,6 +97,7 @@ h1, h2, h3, h4, h5, h6 {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 16px;
   border-radius: var(--radius-sm);
@@ -439,6 +440,10 @@ select.form-control { cursor: pointer; }
   position: relative;
 }
 .input-wrapper .form-control {
+  padding-left: 14px;
+}
+.input-wrapper:has(.input-icon) .form-control,
+.input-wrapper.has-left-icon .form-control {
   padding-left: 38px;
 }
 .input-icon {

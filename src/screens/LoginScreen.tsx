@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff, Key, ShieldCheck, X, CheckCircle, Lock } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, Key, ShieldCheck, X, CheckCircle, Lock, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
@@ -246,16 +246,31 @@ export default function LoginScreen() {
               </div>
             </div>
 
-            <button
-              id="login-submit"
-              type="submit"
-              className="btn btn-primary btn-lg"
-              style={{ width: '100%', marginTop: '8px' }}
-              disabled={loading}
-            >
-              {loading ? <span className="spinner" /> : null}
-              {t('login', language)}
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '18px' }}>
+              <button
+                id="login-submit"
+                type="submit"
+                className="btn btn-primary btn-lg"
+                style={{
+                  width: '100%',
+                  maxWidth: '240px',
+                  height: '44px',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  fontSize: '15px',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+                disabled={loading}
+              >
+                {loading ? <span className="spinner" /> : <LogIn size={17} />}
+                <span>{t('login', language)}</span>
+              </button>
+            </div>
           </form>
 
           <div className="auth-link-row">
