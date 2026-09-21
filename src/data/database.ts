@@ -296,13 +296,16 @@ export const databaseService = {
     const teacher: Teacher = {
       id: user.id,
       name: user.name,
-      subject: 'Not assigned',
+      subject: user.subject || 'Not assigned',
+      otherSubjects: user.otherSubjects || [],
       classRoom: user.classRoom || 'Not assigned',
       casualBalance: 7,
       medicalBalance: 14,
       annualBalance: 21,
       schoolCensusCode: user.schoolCensusCode,
       schoolName: user.schoolName,
+      isClassTeacher: user.isClassTeacher ?? Boolean(user.classRoom && user.classRoom !== 'Not assigned'),
+      teacherType: user.teacherType || (user.classRoom && user.classRoom !== 'Not assigned' ? 'homeroom_teacher' : 'subject_teacher'),
     };
     await setDoc(doc(teachersCol, user.id), cleanData(teacher));
   },
@@ -319,16 +322,21 @@ export const databaseService = {
     const teachers = userSnap.docs.map((doc) => {
       const u = doc.data();
       const t = teacherDocs[doc.id];
+      const assignedClass = u.classRoom || t?.classRoom || 'Not assigned';
+      const isClassTeacher = u.isClassTeacher ?? t?.isClassTeacher ?? Boolean(assignedClass && assignedClass !== 'Not assigned');
       return {
         id: doc.id,
         name: u.name || 'Unknown Teacher',
-        subject: t?.subject || 'Not assigned',
-        classRoom: t?.classRoom || 'Not assigned',
+        subject: u.subject || t?.subject || 'Not assigned',
+        otherSubjects: u.otherSubjects || t?.otherSubjects || [],
+        classRoom: assignedClass,
         casualBalance: t?.casualBalance ?? 7,
         medicalBalance: t?.medicalBalance ?? 14,
         annualBalance: t?.annualBalance ?? 21,
         schoolCensusCode: u.schoolCensusCode || t?.schoolCensusCode || undefined,
         schoolName: u.schoolName || t?.schoolName || undefined,
+        isClassTeacher,
+        teacherType: u.teacherType || t?.teacherType || (isClassTeacher ? 'homeroom_teacher' : 'subject_teacher'),
       };
     });
 

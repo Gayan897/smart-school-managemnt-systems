@@ -25,9 +25,11 @@ export default function SignupScreen() {
   const [schools, setSchools] = useState<GovernmentSchool[]>([]);
   const [selectedSchoolCode, setSelectedSchoolCode] = useState('10421'); // Default: Mahinda Rajapaksha College
 
-  // Class Selection (Teacher only)
+  // Class & Role Selection (Teacher only)
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [selectedClassRoom, setSelectedClassRoom] = useState('');
+  const [teacherType, setTeacherType] = useState<'subject_teacher' | 'homeroom_teacher'>('subject_teacher');
+  const [selectedSubject, setSelectedSubject] = useState('Mathematics');
 
   // Principal Verification Details
   const [zonalSecretKey, setZonalSecretKey] = useState('');
@@ -374,7 +376,10 @@ export default function SignupScreen() {
           nicVerificationStatus: 'pending',
           verificationUnlockAt: unlockTime,
           registeredAt: new Date().toISOString(),
-          ...(selectedClassRoom ? { classRoom: selectedClassRoom } : {}),
+          isClassTeacher: teacherType === 'homeroom_teacher',
+          teacherType,
+          subject: selectedSubject,
+          ...(teacherType === 'homeroom_teacher' && selectedClassRoom ? { classRoom: selectedClassRoom } : {}),
         } : {}),
       };
 
@@ -730,24 +735,135 @@ export default function SignupScreen() {
                   </div>
                 </div>
 
-                {/* Homeroom Class Selection */}
-                <div className="form-group" style={{ marginTop: '12px', marginBottom: '10px' }}>
-                  <label className="form-label" style={{ fontSize: '11px' }}>Homeroom Class <span style={{ color: '#6b7280', fontWeight: 400 }}>(optional)</span></label>
+                {/* Teacher Role Classification: Subject Specialist vs Homeroom Teacher */}
+                <div style={{ marginTop: '14px', marginBottom: '12px' }}>
+                  <label className="form-label" style={{ fontSize: '11px', fontWeight: 700, marginBottom: '6px' }}>
+                    Teaching Role Classification
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTeacherType('subject_teacher');
+                        setSelectedClassRoom('');
+                      }}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        textAlign: 'center',
+                        padding: '10px 8px',
+                        borderRadius: '8px',
+                        border: teacherType === 'subject_teacher' ? '2px solid #0284c7' : '1px solid rgba(255,255,255,0.15)',
+                        background: teacherType === 'subject_teacher' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(255,255,255,0.03)',
+                        cursor: 'pointer',
+                        color: 'inherit',
+                      }}
+                    >
+                      <span style={{ fontSize: '20px', marginBottom: '2px' }}>📚</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: teacherType === 'subject_teacher' ? '#0284c7' : 'inherit' }}>
+                        Subject Specialist
+                      </span>
+                      <span style={{ fontSize: '9.5px', color: '#94a3b8', marginTop: '2px', lineHeight: 1.2 }}>
+                        Teaches across classes (No single room)
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTeacherType('homeroom_teacher')}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        textAlign: 'center',
+                        padding: '10px 8px',
+                        borderRadius: '8px',
+                        border: teacherType === 'homeroom_teacher' ? '2px solid #0284c7' : '1px solid rgba(255,255,255,0.15)',
+                        background: teacherType === 'homeroom_teacher' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(255,255,255,0.03)',
+                        cursor: 'pointer',
+                        color: 'inherit',
+                      }}
+                    >
+                      <span style={{ fontSize: '20px', marginBottom: '2px' }}>🏫</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: teacherType === 'homeroom_teacher' ? '#0284c7' : 'inherit' }}>
+                        Class Teacher
+                      </span>
+                      <span style={{ fontSize: '9.5px', color: '#94a3b8', marginTop: '2px', lineHeight: 1.2 }}>
+                        Assigned to a specific classroom
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Teaching Subject Selection */}
+                <div className="form-group" style={{ marginBottom: '10px' }}>
+                  <label className="form-label" style={{ fontSize: '11px' }}>Primary Teaching Subject</label>
                   <select
                     className="form-control"
-                    value={selectedClassRoom}
-                    onChange={e => setSelectedClassRoom(e.target.value)}
+                    value={selectedSubject}
+                    onChange={e => setSelectedSubject(e.target.value)}
                     style={{ fontSize: '13px' }}
+                    required
                   >
-                    <option value="">— Not assigned yet —</option>
-                    {classes.map(cls => (
-                      <option key={cls.id} value={cls.id}>
-                        Class {cls.id} — Grade {cls.grade}{cls.stream === 'al' ? ' (A/L)' : ' (O/L)'}
-                      </option>
-                    ))}
+                    <option value="Mathematics">Mathematics (ගණිතය / கணிதம்)</option>
+                    <option value="Science">Science (විද්‍යාව / அறிவியல்)</option>
+                    <option value="English Language">English Language (ඉංග්‍රීසි / ஆங்கிலம்)</option>
+                    <option value="Sinhala Language & Lit">Sinhala Language & Literature (සිංහල)</option>
+                    <option value="Tamil Language & Lit">Tamil Language & Literature (தமிழ்)</option>
+                    <option value="History">History (ඉතිහාසය / வரலாறு)</option>
+                    <option value="Geography">Geography (භූගෝල විද්‍යාව / புவியியல்)</option>
+                    <option value="ICT / Information Technology">ICT / Information Technology (තොරතුරු තාක්ෂණය)</option>
+                    <option value="Commerce / Business Studies">Commerce & Business Studies (වාණිජ)</option>
+                    <option value="Accounting">Accounting (ගිණුම්කරණය)</option>
+                    <option value="Economics">Economics (ආර්ථික විද්‍යාව)</option>
+                    <option value="Religion (Buddhism)">Buddhism (බුද්ධ ධර්මය)</option>
+                    <option value="Religion (Christianity)">Christianity (ක්‍රිස්තියානි ධර්මය)</option>
+                    <option value="Religion (Hinduism)">Hinduism (හින්දු ධර්මය)</option>
+                    <option value="Religion (Islam)">Islam (ඉස්ලාම් ධර්මය)</option>
+                    <option value="Health & Physical Education">Health & Physical Education (ශාරීරික අධ්‍යාපනය)</option>
+                    <option value="Aesthetic Studies / Art">Aesthetic Studies / Art (කලාව)</option>
+                    <option value="Music">Music (සංගීතය)</option>
+                    <option value="Dancing">Dancing (නර්තනය)</option>
+                    <option value="Agriculture">Agriculture (කෘෂිකර්මය)</option>
+                    <option value="Combined Mathematics">Combined Mathematics (A/L)</option>
+                    <option value="Physics">Physics (A/L)</option>
+                    <option value="Chemistry">Chemistry (A/L)</option>
+                    <option value="Biology">Biology (A/L)</option>
+                    <option value="Engineering Technology">Engineering Technology (A/L)</option>
+                    <option value="Science for Technology">Science for Technology (A/L)</option>
                   </select>
-                  <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '3px' }}>Select the class you will be a homeroom teacher for.</div>
                 </div>
+
+                {/* Conditional Homeroom Classroom Selection */}
+                {teacherType === 'homeroom_teacher' ? (
+                  <div className="form-group" style={{ marginBottom: '10px' }}>
+                    <label className="form-label" style={{ fontSize: '11px' }}>
+                      Assigned Homeroom Classroom <span style={{ color: '#e11d48' }}>*</span>
+                    </label>
+                    <select
+                      className="form-control"
+                      value={selectedClassRoom}
+                      onChange={e => setSelectedClassRoom(e.target.value)}
+                      style={{ fontSize: '13px' }}
+                      required
+                    >
+                      <option value="">— Select Classroom —</option>
+                      {classes.map(cls => (
+                        <option key={cls.id} value={cls.id}>
+                          Class {cls.id} — Grade {cls.grade}{cls.stream === 'al' ? ' (A/L)' : ' (O/L)'}
+                        </option>
+                      ))}
+                    </select>
+                    <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '3px' }}>
+                      You will be registered as the primary class teacher for daily attendance.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '10.5px', color: '#10b981', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', padding: '6px 10px', borderRadius: '6px', marginBottom: '10px', lineHeight: 1.35 }}>
+                    ✨ <strong>Subject Specialist Flexibility:</strong> You don't need a single classroom. You will have full access to your personalized teaching timetable, leave management, and staff announcements across all classes.
+                  </div>
+                )}
 
                 <div style={{ fontSize: '10.5px', color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '6px 8px', borderRadius: '6px', lineHeight: 1.35 }}>
                   💡 <strong>Automated Verification:</strong> Provide your NIC number and Front & Back photos. Upon validation, a 2-minute security period activates before login is enabled.

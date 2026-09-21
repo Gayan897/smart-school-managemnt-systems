@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { isNoticeRelevantToUser, type AppLanguage } from '../data/models';
+import { isNoticeRelevantToUser, isUserSubjectSpecialist, type AppLanguage } from '../data/models';
 
 const NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
@@ -57,6 +57,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     navigate('/login');
   }
 
+  const isSubjectSpecialist = isUserSubjectSpecialist(user);
+
   const items = NAV_ITEMS.filter(item => {
     if (user?.role === 'zonal_admin') {
       return item.zonalAdminOnly || item.key === 'notifications' || item.key === 'reports' || item.key === 'leave';
@@ -64,12 +66,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (item.zonalAdminOnly) return false;
     if (item.principalOnly) return user?.role === 'principal';
     if (item.hideForTeacher && user?.role === 'teacher') return false;
+    // Subject Specialist: Exclude attendance, performance, reports, and edupub
+    if (isSubjectSpecialist && (item.key === 'attendance' || item.key === 'performance' || item.key === 'reports' || item.key === 'edupub')) {
+      return false;
+    }
     return true;
   });
 
   const roleLabel =
     user?.role === 'zonal_admin' ? '🏛️ Zonal Admin' :
-    user?.role === 'principal' ? '🏫 Principal' : '👩‍🏫 Teacher';
+    user?.role === 'principal' ? '🏫 Principal' :
+    isSubjectSpecialist ? '📚 Subject Specialist' : '👩‍🏫 Class Teacher';
 
   return (
     <div className="shell">

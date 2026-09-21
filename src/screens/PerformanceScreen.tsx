@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Save, Eye, Trophy, Award, GraduationCap, Sparkles, Check, BookOpen,
   UserCheck, Layers, FileSpreadsheet, BarChart2, RefreshCw, AlertCircle,
-  FileDown, Download, Medal, Calendar, Search, CheckCircle2, Plus, Sliders
+  FileDown, Download, Medal, Calendar, Search, CheckCircle2, Plus, Sliders,
+  Bell, Send
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
@@ -105,9 +106,15 @@ export default function PerformanceScreen() {
   const [loading, setLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Mode: 'by_subject' | 'by_student' | 'class_overview' | 'chart'
-  const [activeTab, setActiveTab] = useState<'by_subject' | 'by_student' | 'class_overview' | 'chart'>('by_subject');
+  // Mode: 'by_subject' | 'by_student' | 'class_overview' | 'chart' | 'low_marks'
+  const [activeTab, setActiveTab] = useState<'by_subject' | 'by_student' | 'class_overview' | 'chart' | 'low_marks'>('by_subject');
   const [selectedProfileStudentId, setSelectedProfileStudentId] = useState<string | null>(null);
+
+  // Low Marks Monitor State
+  const [lowMarksThreshold, setLowMarksThreshold] = useState(35);
+  const [notifyingParentId, setNotifyingParentId] = useState<string | null>(null);
+  const [bulkNotifying, setBulkNotifying] = useState(false);
+  const [notifiedParents, setNotifiedParents] = useState<Set<string>>(new Set());
 
   // Real-time synchronization of Classes, Students, and Marks
   useEffect(() => {
@@ -366,6 +373,129 @@ export default function PerformanceScreen() {
       r.student.id.toLowerCase().includes(q)
     );
   }, [classRankings, rankingsSearch]);
+
+  // ─── Low Marks Students Detection ───
+  interface LowMarksStudentItem {
+    student: Student;
+    avgMarks: number;
+    grade: string;
+    totalMarks: number;
+    subjectsCount: number;
+    weakSubjects: { subject: string; marks: number; grade: string }[];
+    riskLevel: 'critical' | 'at_risk' | 'borderline';
+    riskColor: string;
+    rankItem: StudentRankingItem | null;
+  }
+
+  const lowMarksStudents = useMemo<LowMarksStudentItem[]>(() => {
+    if (students.length === 0) return [];
+
+    const flagged: LowMarksStudentItem[] = [];
+
+    classRankings.forEach(item => {
+      if (!item.hasMarks) return;
+
+      // Find subjects where student scored below threshold
+      const weakSubjects: { subject: string; marks: number; grade: string }[] = [];
+      const stuMarks = marks.filter(m => m.studentId === item.student.id && m.term === selectedTerm);
+      stuMarks.forEach(m => {
+        if (m.marks < lowMarksThreshold) {
+          const gr = m.marks >= 75 ? 'A' : m.marks >= 65 ? 'B' : m.marks >= 55 ? 'C' : m.marks >= 35 ? 'S' : 'F';
+          const subObj = SRI_LANKA_SUBJECTS.find(s => s.id === m.subject);
+          weakSubjects.push({
+            subject: subObj ? subObj.nameEn : m.subject,
+            marks: m.marks,
+            grade: gr,
+          });
+        }
+      });
+
+      // Flag if average is below threshold OR has any weak subjects
+      if (item.avgMarks < lowMarksThreshold || weakSubjects.length > 0) {
+        let riskLevel: 'critical' | 'at_risk' | 'borderline' = 'borderline';
+        let riskColor = '#d97706'; // amber
+        if (item.avgMarks <= 20 || weakSubjects.some(w => w.marks <= 20)) {
+          riskLevel = 'critical';
+          riskColor = '#ef4444'; // red
+        } else if (item.avgMarks <= 35 || weakSubjects.some(w => w.marks <= 35)) {
+          riskLevel = 'at_risk';
+          riskColor = '#f97316'; // orange
+        }
+
+        flagged.push({
+          student: item.student,
+          avgMarks: item.avgMarks,
+          grade: item.grade,
+          totalMarks: item.totalMarks,
+          subjectsCount: item.subjectsCount,
+          weakSubjects: weakSubjects.sort((a, b) => a.marks - b.marks),
+          riskLevel,
+          riskColor,
+          rankItem: item,
+        });
+      }
+    });
+
+    // Sort: critical first, then at_risk, then borderline; within same level sort by avg ascending
+    const riskOrder = { critical: 0, at_risk: 1, borderline: 2 };
+    return flagged.sort((a, b) => {
+      if (riskOrder[a.riskLevel] !== riskOrder[b.riskLevel]) return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
+      return a.avgMarks - b.avgMarks;
+    });
+  }, [classRankings, marks, students, selectedTerm, lowMarksThreshold]);
+
+  // ─── Notify Parent about Low Marks ───
+  async function handleNotifyParent(item: LowMarksStudentItem) {
+    if (!user || notifiedParents.has(item.student.id)) return;
+    setNotifyingParentId(item.student.id);
+    try {
+      const weakList = item.weakSubjects.map(w => `${w.subject}: ${w.marks}/100 (Grade ${w.grade})`).join('\n• ');
+      const className = currentClassObj ? `Grade ${currentClassObj.grade}${currentClassObj.section}` : selectedClass;
+
+      const notice: import('../data/models').Notice = {
+        id: `notice_low_marks_${item.student.id}_t${selectedTerm}_${Date.now()}`,
+        title: `⚠️ Low Performance Alert — ${item.student.name}`,
+        body: `Dear Parent/Guardian,\n\nThis is to inform you that your child ${item.student.name} (Adm#: ${item.student.admissionNumber || item.student.id}) from ${className} has scored below the expected threshold in the Term ${selectedTerm} examination.\n\n📊 Overall Performance:\n• Average Mark: ${item.avgMarks}% (Grade: ${item.grade})\n• Total Marks: ${item.totalMarks} across ${item.subjectsCount} subjects\n\n⚠️ Weak Subjects:\n• ${weakList}\n\nWe kindly request your attention and support to help improve your child's academic performance. Please meet the class teacher to discuss a plan for improvement.\n\nBest Regards,\n${user.name}\n${className} Homeroom Teacher`,
+        date: new Date().toISOString(),
+        category: 'Academic',
+        targetRole: 'parent',
+        targetClassRoom: selectedClass,
+        authorName: user.name,
+        authorRole: user.role,
+        priority: 'high',
+        schoolCensusCode: user.schoolCensusCode,
+        schoolName: user.schoolName,
+      };
+
+      await databaseService.createNotice(notice);
+      setNotifiedParents(prev => new Set(prev).add(item.student.id));
+      setSuccessMsg(`📨 Parent notification sent for ${item.student.name}!`);
+      setTimeout(() => setSuccessMsg(''), 3500);
+    } catch (err) {
+      console.error('Failed to send parent notification:', err);
+    } finally {
+      setNotifyingParentId(null);
+    }
+  }
+
+  // ─── Bulk Notify All Low-Marks Parents ───
+  async function handleBulkNotifyParents() {
+    if (!user || lowMarksStudents.length === 0) return;
+    setBulkNotifying(true);
+    let sentCount = 0;
+    try {
+      for (const item of lowMarksStudents) {
+        if (notifiedParents.has(item.student.id)) continue;
+        await handleNotifyParent(item);
+        sentCount++;
+        await new Promise(res => setTimeout(res, 200));
+      }
+      setSuccessMsg(`✅ Sent ${sentCount} parent notification${sentCount !== 1 ? 's' : ''} for low-performing students!`);
+      setTimeout(() => setSuccessMsg(''), 4500);
+    } finally {
+      setBulkNotifying(false);
+    }
+  }
 
   // ─── Download Student Term Report Card ───
   function handleDownloadReportCard(rankingItem: StudentRankingItem) {
@@ -762,24 +892,36 @@ export default function PerformanceScreen() {
       {/* Teacher's Locked Assigned Class Banner & Term Selector */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', alignItems: 'center' }}>
-          {/* Assigned Class Banner (Teacher is scoped ONLY to their class) */}
+          {/* Class Selector & Role Badge */}
           <div>
-            <label className="form-label" style={{ marginBottom: '8px' }}>{t('assignedClass', language)}</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', minHeight: '44px' }}>
-              <GraduationCap size={20} style={{ color: 'var(--primary-color)' }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
-                  {currentClassObj ? `${t('grade', language)} ${currentClassObj.grade}${currentClassObj.section}` : (selectedClass || 'My Class')}
-                </span>
-                {currentClassObj && (
-                  <span className="badge badge-primary" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                    {currentClassObj.stream === 'ol' ? t('olStream', language) : t('alStream', language)}
-                  </span>
-                )}
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                  {students.length} Student{students.length !== 1 ? 's' : ''} in Roster
-                </span>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label className="form-label" style={{ margin: 0, fontWeight: 700 }}>
+                {user?.isClassTeacher || (user?.classRoom && user.classRoom !== 'Not assigned') ? '🏫 My Class / Active Class' : '📚 Select Teaching Class'}
+              </label>
+              <span className="badge badge-secondary" style={{ fontSize: '10.5px' }}>
+                {user?.isClassTeacher || (user?.classRoom && user.classRoom !== 'Not assigned')
+                  ? `Class Teacher (${user.classRoom})`
+                  : `Subject Teacher${user?.subject ? ` · ${user.subject}` : ''}`}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <select
+                id="perf-teacher-class-select"
+                className="form-control"
+                value={selectedClass}
+                onChange={e => setSelectedClass(e.target.value)}
+                style={{ minHeight: '44px', fontWeight: 600, fontSize: '14px' }}
+              >
+                {classes.map(cls => (
+                  <option key={cls.id} value={cls.id}>
+                    Class {cls.id} — Grade {cls.grade}{cls.section} ({cls.stream === 'al' ? 'A/L' : 'O/L'})
+                    {cls.homeroomTeacherName ? ` · Homeroom: ${cls.homeroomTeacherName}` : ''}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                <strong>{students.length}</strong> Students
+              </span>
             </div>
           </div>
 
@@ -859,6 +1001,30 @@ export default function PerformanceScreen() {
           style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           <BarChart2 size={15} /> Performance Chart
+        </button>
+        <button
+          className={`tab ${activeTab === 'low_marks' ? 'active' : ''}`}
+          onClick={() => setActiveTab('low_marks')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: activeTab === 'low_marks' ? 700 : 500 }}
+        >
+          <AlertCircle size={15} style={{ color: activeTab === 'low_marks' ? '#ef4444' : 'inherit' }} />
+          Low Marks Monitor
+          {lowMarksStudents.length > 0 && (
+            <span style={{
+              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              color: '#ffffff',
+              fontSize: '10px',
+              fontWeight: 800,
+              padding: '1px 7px',
+              borderRadius: '20px',
+              minWidth: '18px',
+              textAlign: 'center',
+              lineHeight: '16px',
+              boxShadow: '0 1px 4px rgba(239, 68, 68, 0.4)',
+            }}>
+              {lowMarksStudents.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -1912,6 +2078,374 @@ export default function PerformanceScreen() {
               </ResponsiveContainer>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─── TAB 5: LOW MARKS MONITOR & PARENT NOTIFICATION ─── */}
+      {activeTab === 'low_marks' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+
+          {/* ── Threshold Configuration Card ── */}
+          <div className="card" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(249,115,22,0.04) 100%)', border: '1.5px solid rgba(239, 68, 68, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                  <AlertCircle size={20} style={{ color: '#ef4444' }} />
+                  Low Marks Threshold Configuration
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--text-muted)' }}>
+                  Students scoring below this mark (or with any subject below it) are flagged for attention
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Sliders size={14} style={{ color: '#ef4444' }} />
+                  <input
+                    type="range"
+                    min={10}
+                    max={55}
+                    step={5}
+                    value={lowMarksThreshold}
+                    onChange={e => setLowMarksThreshold(Number(e.target.value))}
+                    style={{ width: '140px', cursor: 'pointer', accentColor: '#ef4444' }}
+                  />
+                  <span style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: '#ef4444',
+                    padding: '5px 14px',
+                    borderRadius: '20px',
+                    fontWeight: 800,
+                    fontSize: '14px',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    minWidth: '60px',
+                    textAlign: 'center',
+                  }}>
+                    &lt; {lowMarksThreshold}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Summary Stats Cards ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            {/* Total At-Risk Students */}
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 100%)',
+              border: '1.5px solid rgba(239, 68, 68, 0.25)',
+              padding: '18px 20px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#ef4444', fontWeight: 700, marginBottom: '6px' }}>Total At-Risk Students</div>
+              <div style={{ fontSize: '32px', fontWeight: 900, color: lowMarksStudents.length > 0 ? '#ef4444' : 'var(--text-muted)' }}>
+                {lowMarksStudents.length}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                of {students.length} in class
+              </div>
+            </div>
+
+            {/* Critical Count */}
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.04) 100%)',
+              border: '1.5px solid rgba(239, 68, 68, 0.35)',
+              padding: '18px 20px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#dc2626', fontWeight: 700, marginBottom: '6px' }}>Critical (≤ 20%)</div>
+              <div style={{ fontSize: '32px', fontWeight: 900, color: '#dc2626' }}>
+                {lowMarksStudents.filter(s => s.riskLevel === 'critical').length}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Need urgent attention
+              </div>
+            </div>
+
+            {/* At Risk Count */}
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, rgba(249,115,22,0.08) 0%, rgba(249,115,22,0.02) 100%)',
+              border: '1.5px solid rgba(249, 115, 22, 0.3)',
+              padding: '18px 20px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#f97316', fontWeight: 700, marginBottom: '6px' }}>At Risk (≤ 35%)</div>
+              <div style={{ fontSize: '32px', fontWeight: 900, color: '#f97316' }}>
+                {lowMarksStudents.filter(s => s.riskLevel === 'at_risk').length}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Below pass mark
+              </div>
+            </div>
+
+            {/* Avg of Flagged */}
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, rgba(217,119,6,0.08) 0%, rgba(217,119,6,0.02) 100%)',
+              border: '1.5px solid rgba(217, 119, 6, 0.3)',
+              padding: '18px 20px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#d97706', fontWeight: 700, marginBottom: '6px' }}>Avg of Flagged Students</div>
+              <div style={{ fontSize: '32px', fontWeight: 900, color: '#d97706' }}>
+                {lowMarksStudents.length > 0
+                  ? Math.round(lowMarksStudents.reduce((sum, s) => sum + s.avgMarks, 0) / lowMarksStudents.length)
+                  : '—'}%
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Average performance
+              </div>
+            </div>
+          </div>
+
+          {/* ── Low Marks Students Table ── */}
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', paddingBottom: '14px', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '14px' }}>
+              <div>
+                <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={18} style={{ color: '#ef4444' }} />
+                  Students Below Threshold — Term {selectedTerm}
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  {lowMarksStudents.length} student{lowMarksStudents.length !== 1 ? 's' : ''} flagged • Threshold: &lt; {lowMarksThreshold}%
+                </p>
+              </div>
+
+              {/* Bulk Notify All Button */}
+              {lowMarksStudents.length > 0 && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={handleBulkNotifyParents}
+                  disabled={bulkNotifying || lowMarksStudents.every(s => notifiedParents.has(s.student.id))}
+                  style={{
+                    background: lowMarksStudents.every(s => notifiedParents.has(s.student.id))
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    color: lowMarksStudents.every(s => notifiedParents.has(s.student.id)) ? '#10b981' : '#ffffff',
+                    border: lowMarksStudents.every(s => notifiedParents.has(s.student.id))
+                      ? '1px solid rgba(16, 185, 129, 0.4)'
+                      : 'none',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '9px 18px',
+                    fontSize: '13px',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: lowMarksStudents.every(s => notifiedParents.has(s.student.id))
+                      ? 'none'
+                      : '0 3px 12px rgba(239, 68, 68, 0.3)',
+                    cursor: lowMarksStudents.every(s => notifiedParents.has(s.student.id)) ? 'default' : 'pointer',
+                  }}
+                >
+                  {bulkNotifying ? (
+                    <><span className="spinner" /> Sending Notifications...</>
+                  ) : lowMarksStudents.every(s => notifiedParents.has(s.student.id)) ? (
+                    <><CheckCircle2 size={15} /> All Parents Notified ✓</>
+                  ) : (
+                    <><Send size={15} /> Notify All Parents ({lowMarksStudents.filter(s => !notifiedParents.has(s.student.id)).length})</>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {lowMarksStudents.length === 0 ? (
+              <div style={{
+                padding: '50px 20px',
+                textAlign: 'center',
+                background: 'rgba(16, 185, 129, 0.06)',
+                borderRadius: 'var(--radius-md)',
+                border: '1.5px dashed rgba(16, 185, 129, 0.3)',
+              }}>
+                <CheckCircle2 size={40} style={{ color: '#10b981', marginBottom: '12px' }} />
+                <p style={{ color: '#10b981', fontWeight: 700, fontSize: '16px', margin: '0 0 4px 0' }}>All Students Above Threshold!</p>
+                <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '13px' }}>
+                  No students in Class {selectedClass} scored below {lowMarksThreshold}% in Term {selectedTerm}.
+                  Try adjusting the threshold slider above.
+                </p>
+              </div>
+            ) : (
+              <div className="table-wrapper" style={{ border: 'none', overflowX: 'auto' }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '36px' }}>#</th>
+                      <th style={{ width: '75px', textAlign: 'center' }}>Risk</th>
+                      <th>Student Name</th>
+                      <th>Admission #</th>
+                      <th style={{ textAlign: 'center' }}>Average</th>
+                      <th style={{ textAlign: 'center' }}>Grade</th>
+                      <th>Weak Subjects</th>
+                      <th style={{ textAlign: 'center' }}>Parent Contact</th>
+                      <th style={{ textAlign: 'center', width: '170px' }}>Notify Parent</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lowMarksStudents.map((item, idx) => {
+                      const isNotified = notifiedParents.has(item.student.id);
+                      const isNotifying = notifyingParentId === item.student.id;
+
+                      return (
+                        <tr
+                          key={item.student.id}
+                          style={{
+                            background: item.riskLevel === 'critical'
+                              ? 'rgba(239, 68, 68, 0.04)'
+                              : item.riskLevel === 'at_risk'
+                              ? 'rgba(249, 115, 22, 0.03)'
+                              : 'rgba(217, 119, 6, 0.02)',
+                          }}
+                        >
+                          <td style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{idx + 1}</td>
+
+                          {/* Risk Level Badge */}
+                          <td style={{ textAlign: 'center' }}>
+                            <span
+                              className="badge"
+                              style={{
+                                background: item.riskLevel === 'critical'
+                                  ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                                  : item.riskLevel === 'at_risk'
+                                  ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
+                                  : 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                                color: '#ffffff',
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                fontSize: '10px',
+                                letterSpacing: '0.3px',
+                                boxShadow: `0 2px 6px ${item.riskColor}33`,
+                              }}
+                            >
+                              {item.riskLevel === 'critical' ? '🔴 CRITICAL'
+                                : item.riskLevel === 'at_risk' ? '🟠 AT RISK'
+                                : '🟡 BORDERLINE'}
+                            </span>
+                          </td>
+
+                          {/* Student Name */}
+                          <td>
+                            <button
+                              type="button"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                color: 'inherit',
+                              }}
+                              onClick={() => setSelectedProfileStudentId(item.student.id)}
+                              title="Click to view full student profile"
+                            >
+                              <div style={{ fontWeight: 600, color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                                {item.student.name}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {item.student.id}</div>
+                            </button>
+                          </td>
+
+                          {/* Admission */}
+                          <td>
+                            <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                              {item.student.admissionNumber || item.student.id}
+                            </span>
+                          </td>
+
+                          {/* Average */}
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ fontWeight: 800, fontSize: '15px', color: item.riskColor }}>
+                              {item.avgMarks}%
+                            </span>
+                          </td>
+
+                          {/* Grade */}
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`badge ${item.grade === 'F' ? 'badge-danger' : item.grade === 'S' ? 'badge-warning' : 'badge-muted'}`} style={{ fontWeight: 800 }}>
+                              {item.grade}
+                            </span>
+                          </td>
+
+                          {/* Weak Subjects */}
+                          <td>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {item.weakSubjects.slice(0, 4).map((ws, i) => (
+                                <span
+                                  key={i}
+                                  style={{
+                                    background: ws.marks <= 20 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(249, 115, 22, 0.1)',
+                                    color: ws.marks <= 20 ? '#dc2626' : '#ea580c',
+                                    border: `1px solid ${ws.marks <= 20 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(249, 115, 22, 0.25)'}`,
+                                    padding: '2px 7px',
+                                    borderRadius: '6px',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title={`${ws.subject}: ${ws.marks}/100`}
+                                >
+                                  {ws.subject.length > 12 ? ws.subject.slice(0, 12) + '…' : ws.subject} ({ws.marks})
+                                </span>
+                              ))}
+                              {item.weakSubjects.length > 4 && (
+                                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, padding: '2px 4px' }}>
+                                  +{item.weakSubjects.length - 4} more
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Parent Contact */}
+                          <td style={{ textAlign: 'center', fontSize: '12px' }}>
+                            {item.student.parentContact ? (
+                              <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                {item.student.parentContact}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Notify Parent Action */}
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={() => handleNotifyParent(item)}
+                              disabled={isNotified || isNotifying}
+                              style={{
+                                background: isNotified
+                                  ? 'rgba(16, 185, 129, 0.12)'
+                                  : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                color: isNotified ? '#10b981' : '#ffffff',
+                                border: isNotified ? '1px solid rgba(16, 185, 129, 0.35)' : 'none',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '5px 12px',
+                                fontSize: '11.5px',
+                                borderRadius: 'var(--radius-md)',
+                                boxShadow: isNotified ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.25)',
+                                cursor: isNotified ? 'default' : 'pointer',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              {isNotifying ? (
+                                <><span className="spinner" style={{ width: '12px', height: '12px' }} /> Sending...</>
+                              ) : isNotified ? (
+                                <><CheckCircle2 size={13} /> Notified ✓</>
+                              ) : (
+                                <><Bell size={13} /> Notify Parent</>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

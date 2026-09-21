@@ -163,6 +163,8 @@ export interface User {
   subject?: string;          // Main teaching subject
   otherSubjects?: string[];  // Other subjects the teacher can also handle
   subjectSetupComplete?: boolean; // True after teacher has filled subject info post-login
+  isClassTeacher?: boolean;  // True if assigned as homeroom/class teacher
+  teacherType?: 'subject_teacher' | 'homeroom_teacher'; // 'subject_teacher' (rotates across classes) or 'homeroom_teacher' (owns a class)
 }
 
 export interface Student {
@@ -191,6 +193,8 @@ export interface Teacher {
   annualBalance: number;
   schoolCensusCode?: string;
   schoolName?: string;
+  isClassTeacher?: boolean;
+  teacherType?: 'subject_teacher' | 'homeroom_teacher';
 }
 
 export interface SchoolClass {
@@ -489,6 +493,13 @@ export function isNoticeRelevantToUser(notice: Notice, user: User | null): boole
   if (user.role === 'parent' && target === 'parent') return true;
 
   return false;
+}
+
+export function isUserSubjectSpecialist(user?: User | null): boolean {
+  if (!user || user.role !== 'teacher') return false;
+  if (user.teacherType === 'subject_teacher') return true;
+  if (user.teacherType === 'homeroom_teacher') return false;
+  return !user.isClassTeacher && (!user.classRoom || user.classRoom === 'Not assigned');
 }
 
 export interface ZonalKeyRequest {

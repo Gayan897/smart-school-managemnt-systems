@@ -217,14 +217,14 @@ export default function ZonalAdminScreen() {
       // Desktop: Copy to clipboard and safely attempt Phone Link via hidden iframe (avoids Bing)
       navigator.clipboard.writeText(`To: ${cleanPhone}\n\n${smsBody}`).then(() => {
         setEmailStatusMsg(`📋 SMS alert copied to clipboard for Principal (${cleanPhone})!`);
-      }).catch(() => {});
+      }).catch(() => { });
 
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none';
       iframe.src = `sms:${encodeURIComponent(cleanPhone)}?body=${encodeURIComponent(smsBody)}`;
       document.body.appendChild(iframe);
       setTimeout(() => {
-        try { document.body.removeChild(iframe); } catch {}
+        try { document.body.removeChild(iframe); } catch { }
       }, 1000);
     }
   }

@@ -6,7 +6,7 @@ import type {
   ProxyCandidate,
 } from './models';
 
-// ─── Subject Affinity Clusters ────────────────────────────────────────────────
+// Subject Affinity Clusters
 
 export const SUBJECT_CLUSTERS: Record<string, string[]> = {
   maths: [

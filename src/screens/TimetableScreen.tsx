@@ -111,10 +111,29 @@ export default function TimetableScreen() {
     return classes.find((c) => c.id === selectedClass);
   }, [classes, selectedClass]);
 
+  // Teacher Schedule & View Mode
+  const isTeacher = user?.role === 'teacher';
+  const [viewMode, setViewMode] = useState<'class' | 'my_schedule'>(isTeacher ? 'my_schedule' : 'class');
+
   // Slots for the selected class and academic year
   const classSlots = useMemo(() => {
     return slots.filter((s) => s.classRoom === selectedClass);
   }, [slots, selectedClass]);
+
+  // Slots assigned to this specific teacher across all classes
+  const teacherSlots = useMemo(() => {
+    if (!user) return [];
+    const nameNorm = (user.name || '').trim().toLowerCase();
+    const userId = user.id;
+    return slots.filter((s) => {
+      const slotTeacherNorm = (s.teacher || '').trim().toLowerCase();
+      return (
+        (s.teacherId && s.teacherId === userId) ||
+        (slotTeacherNorm && slotTeacherNorm === nameNorm) ||
+        (slotTeacherNorm && nameNorm && (nameNorm.includes(slotTeacherNorm) || slotTeacherNorm.includes(nameNorm)))
+      );
+    });
+  }, [slots, user]);
 
   // Setup mappings when generator modal opens
   useEffect(() => {
@@ -125,6 +144,9 @@ export default function TimetableScreen() {
   }, [activeClassObj, teachers, showGenerateModal]);
 
   function getSlot(day: number, period: number): TimetableSlot | undefined {
+    if (isTeacher && viewMode === 'my_schedule') {
+      return teacherSlots.find((s) => s.dayOfWeek === day && s.period === period);
+    }
     return classSlots.find((s) => s.dayOfWeek === day && s.period === period);
   }
 
@@ -397,8 +419,55 @@ export default function TimetableScreen() {
                   </option>
                 ))}
               </select>
+            ) : user?.role === 'teacher' ? (
+              /* Teacher: Toggle between "My Teaching Schedule" and "Classroom Timetable" */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('my_schedule')}
+                    className={`btn btn-sm ${viewMode === 'my_schedule' ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <span>📅</span>
+                    <span>My Teaching Schedule</span>
+                    <span className="badge badge-secondary" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                      {teacherSlots.length} Periods
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('class')}
+                    className={`btn btn-sm ${viewMode === 'class' ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ flex: 1, fontSize: '12px', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <span>🏫</span>
+                    <span>Classroom Timetable</span>
+                  </button>
+                </div>
+
+                {viewMode === 'class' ? (
+                  <select
+                    className="form-control"
+                    value={selectedClass}
+                    onChange={(e) => setSelectedClass(e.target.value)}
+                    style={{ fontSize: '13px' }}
+                  >
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        Class {c.id} (Grade {c.grade}{c.section}) — {c.stream === 'al' ? 'A/L' : 'O/L'}
+                        {c.homeroomTeacherName ? ` · Homeroom: ${c.homeroomTeacherName}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: '11px', color: '#0284c7', background: 'rgba(2,132,199,0.08)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(2,132,199,0.2)' }}>
+                    Showing all periods where <strong>{user?.name}</strong> is scheduled to teach across the school.
+                  </div>
+                )}
+              </div>
             ) : (
-              /* Teacher / Student: locked to their own class — read-only */
+              /* Student: locked to their own class — read-only */
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -547,6 +616,7 @@ export default function TimetableScreen() {
                       key={`${d.num}-${p}`}
                       slot={slot}
                       isPrincipal={user?.role === 'principal'}
+                      isTeacherSchedule={isTeacher && viewMode === 'my_schedule'}
                       onDelete={() => handleDelete(d.num, p)}
                     />
                   );
@@ -581,6 +651,7 @@ export default function TimetableScreen() {
                       key={`${d.num}-${p}`}
                       slot={slot}
                       isPrincipal={user?.role === 'principal'}
+                      isTeacherSchedule={isTeacher && viewMode === 'my_schedule'}
                       onDelete={() => handleDelete(d.num, p)}
                     />
                   );
@@ -1120,10 +1191,12 @@ export default function TimetableScreen() {
 function SlotCell({
   slot,
   isPrincipal,
+  isTeacherSchedule,
   onDelete,
 }: {
   slot?: TimetableSlot;
   isPrincipal: boolean;
+  isTeacherSchedule?: boolean;
   onDelete: () => void;
 }) {
   const matchedSubject = SL_OL_8_SUBJECTS.find(
@@ -1137,6 +1210,7 @@ function SlotCell({
       style={{
         position: 'relative',
         borderLeft: slot ? `3px solid ${color}` : undefined,
+        background: isTeacherSchedule && slot ? 'rgba(59, 130, 246, 0.04)' : undefined,
       }}
     >
       {slot ? (
@@ -1144,7 +1218,24 @@ function SlotCell({
           <span className="timetable-slot-subject" title={slot.subject}>
             {slot.subject}
           </span>
-          <span className="timetable-slot-teacher">{slot.teacher}</span>
+          {isTeacherSchedule ? (
+            <span
+              style={{
+                display: 'inline-block',
+                background: 'rgba(59, 130, 246, 0.12)',
+                color: '#2563eb',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: 700,
+                marginTop: '3px',
+              }}
+            >
+              🏛️ Class {slot.classRoom}
+            </span>
+          ) : (
+            <span className="timetable-slot-teacher">{slot.teacher}</span>
+          )}
 
           {isPrincipal && (
             <button
@@ -1169,7 +1260,9 @@ function SlotCell({
           )}
         </>
       ) : (
-        <span style={{ color: 'var(--text-muted)', fontSize: '11px', margin: 'auto' }}>—</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: '11px', margin: 'auto' }}>
+          {isTeacherSchedule ? 'Free Period' : '—'}
+        </span>
       )}
     </div>
   );

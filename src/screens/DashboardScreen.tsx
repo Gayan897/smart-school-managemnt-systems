@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Sparkles, Activity, Key, Shield, Clock } from 'lucide-react';
+import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Sparkles, Activity, Key, Shield, Clock, BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { isNoticeRelevantToUser, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ZonalKeyRequest, type SchoolClass } from '../data/models';
+import { isNoticeRelevantToUser, isUserSubjectSpecialist, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ZonalKeyRequest, type SchoolClass } from '../data/models';
 
 export default function DashboardScreen() {
   const { user, language } = useAuth();
@@ -57,6 +57,7 @@ export default function DashboardScreen() {
   }, [userSchoolCode]);
 
   const isZonalAdmin = user?.role === 'zonal_admin';
+  const isTeacher = user?.role === 'teacher';
   const currentSchoolCode = user?.schoolCensusCode;
 
   const today = new Date().toISOString().split('T')[0];
@@ -68,7 +69,12 @@ export default function DashboardScreen() {
     ? leaveReqs
     : leaveReqs.filter(l => l.schoolCensusCode === currentSchoolCode);
 
-  const pendingLeave = displayLeaveReqs.filter(l => l.status === 'pending').length;
+  // Teachers: show only their own pending leave count
+  // Principals: show pending requests from staff they need to approve
+  // Zonal admins: show all pending requests
+  const pendingLeave = isTeacher
+    ? displayLeaveReqs.filter(l => l.status === 'pending' && l.teacherId === user?.id).length
+    : displayLeaveReqs.filter(l => l.status === 'pending').length;
 
   const displayStudents = isZonalAdmin
     ? students
@@ -78,7 +84,6 @@ export default function DashboardScreen() {
     ? teachers
     : teachers.filter(t => t.schoolCensusCode === currentSchoolCode);
 
-  const isTeacher = user?.role === 'teacher';
 
   const teacherObj = teachers.find(t =>
     (user?.id && t.id === user.id) ||
@@ -134,36 +139,69 @@ export default function DashboardScreen() {
     return date.toLocaleDateString();
   }
 
-  const stats = [
-    {
-      label: t('totalStudents', language),
-      value: displayStudents.length,
-      icon: GraduationCap,
-      color: '#0284c7',
-      bg: 'rgba(2,132,199,0.15)',
-    },
-    {
-      label: t('totalTeachers', language),
-      value: displayTeachers.length,
-      icon: Users,
-      color: '#0d9488',
-      bg: 'rgba(13,148,136,0.15)',
-    },
-    {
-      label: t('pendingLeave', language),
-      value: pendingLeave,
-      icon: FileText,
-      color: '#f59e0b',
-      bg: 'rgba(245,158,11,0.15)',
-    },
-    {
-      label: t('presentToday', language),
-      value: presentToday,
-      icon: CheckCircle,
-      color: '#10b981',
-      bg: 'rgba(16,185,129,0.15)',
-    },
-  ];
+  const isSubjectSpecialist = isUserSubjectSpecialist(user);
+
+  const stats = isSubjectSpecialist
+    ? [
+        {
+          label: 'Specialist Subject',
+          value: user?.subject || teacherObj?.subject || 'Multi-Class Specialist',
+          icon: BookOpen,
+          color: '#8b5cf6',
+          bg: 'rgba(139,92,246,0.15)',
+        },
+        {
+          label: 'Teaching Scope',
+          value: `${classes.length || 12} Classes`,
+          icon: GraduationCap,
+          color: '#0284c7',
+          bg: 'rgba(2,132,199,0.15)',
+        },
+        {
+          label: t('totalTeachers', language),
+          value: displayTeachers.length,
+          icon: Users,
+          color: '#0d9488',
+          bg: 'rgba(13,148,136,0.15)',
+        },
+        {
+          label: t('pendingLeave', language),
+          value: pendingLeave,
+          icon: FileText,
+          color: '#f59e0b',
+          bg: 'rgba(245,158,11,0.15)',
+        },
+      ]
+    : [
+        {
+          label: t('totalStudents', language),
+          value: displayStudents.length,
+          icon: GraduationCap,
+          color: '#0284c7',
+          bg: 'rgba(2,132,199,0.15)',
+        },
+        {
+          label: t('totalTeachers', language),
+          value: displayTeachers.length,
+          icon: Users,
+          color: '#0d9488',
+          bg: 'rgba(13,148,136,0.15)',
+        },
+        {
+          label: t('pendingLeave', language),
+          value: pendingLeave,
+          icon: FileText,
+          color: '#f59e0b',
+          bg: 'rgba(245,158,11,0.15)',
+        },
+        {
+          label: t('presentToday', language),
+          value: presentToday,
+          icon: CheckCircle,
+          color: '#10b981',
+          bg: 'rgba(16,185,129,0.15)',
+        },
+      ];
 
   if (loading) {
     return (
@@ -179,7 +217,7 @@ export default function DashboardScreen() {
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <span>{t('welcome', language)}, {user?.name?.split(' ')[0] ?? ''}!</span>
-            {assignedClassRoom && (
+            {assignedClassRoom ? (
               <span
                 style={{
                   fontSize: '13px',
@@ -198,18 +236,42 @@ export default function DashboardScreen() {
                 <GraduationCap size={15} />
                 {assignedClassRoom.toLowerCase().startsWith('class') ? assignedClassRoom : `Class ${assignedClassRoom}`}
               </span>
-            )}
+            ) : isTeacher ? (
+              <span
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  padding: '3px 12px',
+                  borderRadius: '20px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.28)',
+                  letterSpacing: '0.2px',
+                }}
+              >
+                <BookOpen size={15} />
+                {user?.subject ? `Specialist: ${user.subject}` : 'Subject Specialist'}
+              </span>
+            ) : null}
           </h1>
           {user?.schoolName && user.role !== 'zonal_admin' && (
             <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span>🏫 {user.schoolName}</span>
               {user.schoolCensusCode && <span style={{ opacity: 0.8 }}>(Census Code: {user.schoolCensusCode})</span>}
-              {assignedClassRoom && (
+              {assignedClassRoom ? (
                 <>
                   <span style={{ opacity: 0.4 }}>•</span>
                   <span>🏛️ {t('assignedClass', language)}: <strong>{assignedClassRoom}</strong></span>
                 </>
-              )}
+              ) : isTeacher ? (
+                <>
+                  <span style={{ opacity: 0.4 }}>•</span>
+                  <span>📚 Subject Specialist: <strong>{user?.subject || teacherObj?.subject || 'Multi-class Faculty'}</strong></span>
+                </>
+              ) : null}
             </div>
           )}
           {!user?.schoolName && assignedClassRoom && (
@@ -292,6 +354,122 @@ export default function DashboardScreen() {
           </div>
         ))}
       </div>
+
+      {/* Subject Specialist Quick Workspaces */}
+      {isSubjectSpecialist && (
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={16} color="var(--primary)" />
+              Specialist Quick Workspaces
+            </h2>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Rotational subject faculty portal • Homeroom duties handled by class teachers
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+            <Link
+              to="/timetable"
+              className="card"
+              style={{
+                padding: '16px',
+                textDecoration: 'none',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                border: '1px solid rgba(2, 132, 199, 0.25)',
+                background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.05) 0%, rgba(2, 132, 199, 0.01) 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7' }}>
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>My Teaching Timetable</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>View rotational class schedule</div>
+                </div>
+              </div>
+              <div style={{ fontSize: '12px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                View Schedule <ArrowRight size={13} />
+              </div>
+            </Link>
+
+            <Link
+              to="/leave"
+              className="card"
+              style={{
+                padding: '16px',
+                textDecoration: 'none',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.01) 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Leave & Proxy Notes</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Submit leave & lesson plans</div>
+                </div>
+              </div>
+              <div style={{ fontSize: '12px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                Manage Leave <ArrowRight size={13} />
+              </div>
+            </Link>
+
+            <Link
+              to="/notifications"
+              className="card"
+              style={{
+                padding: '16px',
+                textDecoration: 'none',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                border: '1px solid rgba(139, 92, 246, 0.25)',
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(139, 92, 246, 0.01) 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6' }}>
+                  <Bell size={20} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Staff Bulletins</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>School notices & circulars</div>
+                </div>
+              </div>
+              <div style={{ fontSize: '12px', color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                Read Bulletins <ArrowRight size={13} />
+              </div>
+            </Link>
+
+            <Link
+              to="/profile"
+              className="card"
+              style={{
+                padding: '16px',
+                textDecoration: 'none',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.01) 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                  <Users size={20} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Specialist Profile</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Qualifications & credentials</div>
+                </div>
+              </div>
+              <div style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                My Profile <ArrowRight size={13} />
+              </div>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Content grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>

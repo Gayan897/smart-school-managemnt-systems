@@ -1,0 +1,952 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-09-21">
+  <diagram id="sams-class-diagram" name="SAMS Comprehensive Class Diagram">
+    <mxGraphModel dx="20" dy="20" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1850">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--                      SECTION LABELS                             -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="sec1" value="1. USER IDENTITY &amp; GOVERNANCE (5 ROLES &amp; SCHOOL STRUCTURE)" style="text;html=1;fontSize=14;fontStyle=1;align=left;fillColor=none;strokeColor=none;fontColor=#4472C4;" vertex="1" parent="1">
+          <mxGeometry x="20" y="10" width="550" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sec2" value="2. CORE DOMAIN ACTORS &amp; PROFILES" style="text;html=1;fontSize=14;fontStyle=1;align=left;fillColor=none;strokeColor=none;fontColor=#2F5597;" vertex="1" parent="1">
+          <mxGeometry x="20" y="320" width="400" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sec3" value="3. ACADEMIC &amp; OPERATIONAL TRANSACTIONS" style="text;html=1;fontSize=14;fontStyle=1;align=left;fillColor=none;strokeColor=none;fontColor=#385723;" vertex="1" parent="1">
+          <mxGeometry x="20" y="580" width="400" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sec4" value="4. PREDICTIVE RADAR &amp; SMART PROXY INTELLIGENCE MODELS" style="text;html=1;fontSize=14;fontStyle=1;align=left;fillColor=none;strokeColor=none;fontColor=#C55A11;" vertex="1" parent="1">
+          <mxGeometry x="20" y="870" width="500" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sec5" value="5. SERVICES, ENGINES &amp; OFFLINE ARCHITECTURE" style="text;html=1;fontSize=14;fontStyle=1;align=left;fillColor=none;strokeColor=none;fontColor=#C00000;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1150" width="450" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sec6" value="6. PRESENTATION &amp; APPLICATION STATE LAYER" style="text;html=1;fontSize=14;fontStyle=1;align=left;fillColor=none;strokeColor=none;fontColor=#B25900;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1520" width="450" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--         TIER 1: USER IDENTITY & GOVERNANCE STRUCTURE           -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- UserRole Enum (Purple) -->
+        <mxCell id="c_userrole" value="&lt;&lt;enumeration&gt;&gt;&#xa;UserRole" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=36;html=1;collapsible=0;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="40" width="180" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_userrole_1" value="+ zonal_admin" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontStyle=0;fontSize=11;html=1;" vertex="1" parent="c_userrole">
+          <mxGeometry y="38" width="180" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_userrole_2" value="+ principal" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontStyle=0;fontSize=11;html=1;" vertex="1" parent="c_userrole">
+          <mxGeometry y="62" width="180" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_userrole_3" value="+ teacher" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontStyle=0;fontSize=11;html=1;" vertex="1" parent="c_userrole">
+          <mxGeometry y="86" width="180" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_userrole_4" value="+ student" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontStyle=0;fontSize=11;html=1;" vertex="1" parent="c_userrole">
+          <mxGeometry y="110" width="180" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_userrole_5" value="+ parent" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontStyle=0;fontSize=11;html=1;" vertex="1" parent="c_userrole">
+          <mxGeometry y="134" width="180" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- User (Blue) -->
+        <mxCell id="c_user" value="User" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="240" y="40" width="290" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="28" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_2" value="+ username: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="48" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_3" value="+ name: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="68" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_4" value="+ role: UserRole" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="88" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_5" value="+ schoolCensusCode: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="108" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_6" value="+ nicNumber: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="128" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_7" value="+ sleasNumber: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="148" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_8" value="+ admissionNumber: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="168" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_9" value="+ studentId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="188" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_10" value="+ isClassTeacher?: boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="208" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_11" value="+ classRoom?: string (if class teacher)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="228" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="248" width="290" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_user_m1" value="+ hasRole(role: UserRole): boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_user">
+          <mxGeometry y="256" width="290" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- GovernmentSchool (Blue) -->
+        <mxCell id="c_school" value="GovernmentSchool" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="580" y="40" width="270" height="240" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_1" value="+ censusCode: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="28" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_2" value="+ name: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="48" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_3" value="+ zone: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="68" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_4" value="+ division: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="88" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_5" value="+ district: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="108" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_6" value="+ zonalSecretKey: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="128" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_7" value="+ principalId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="148" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_8" value="+ principalName: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="168" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_9" value="+ isRegistered: boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="188" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="208" width="270" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_school_m1" value="+ getZonalScope(): string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_school">
+          <mxGeometry y="216" width="270" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ZonalKeyRequest (Blue) -->
+        <mxCell id="c_keyreq" value="ZonalKeyRequest" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="890" y="40" width="260" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="28" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_2" value="+ principalName: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="48" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_3" value="+ sleasNumber: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="68" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_4" value="+ nicNumber: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="88" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_5" value="+ censusCode: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="108" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_6" value="+ status: pending | approved | rejected" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="128" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_7" value="+ requestedAt: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="148" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="170" width="260" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_keyreq_m1" value="+ approve(): void" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_keyreq">
+          <mxGeometry y="178" width="260" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- SchoolClass (Blue) -->
+        <mxCell id="c_class" value="SchoolClass" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="40" width="250" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_1" value="+ id: string [PK] (e.g. '10A')" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="28" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_2" value="+ grade: number (10..13)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="48" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_3" value="+ section: string (A..C)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="68" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_4" value="+ stream: ClassStream (ol | al)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="88" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_5" value="+ homeroomTeacherId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="108" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_6" value="+ homeroomTeacherName: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="128" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="152" width="250" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_class_m1" value="+ getEnrolledStudents(): Student[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_class">
+          <mxGeometry y="160" width="250" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--         TIER 2: CORE DOMAIN ACTORS & PROFILES                  -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- Teacher (Blue) -->
+        <mxCell id="c_teacher" value="Teacher" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="350" width="260" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="28" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_2" value="+ name: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="48" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_3" value="+ subject: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="68" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_4" value="+ isClassTeacher: boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="88" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_5" value="+ teacherType: subject | homeroom" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="108" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_6" value="+ classRoom?: string (if class teacher)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="128" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_7" value="+ casualBalance: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="148" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="170" width="260" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_teacher_m1" value="+ hasSufficientLeave(days, type): boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_teacher">
+          <mxGeometry y="178" width="260" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Student (Blue) -->
+        <mxCell id="c_student" value="Student" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="320" y="350" width="270" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="28" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_2" value="+ admissionNumber: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="48" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_3" value="+ name: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="68" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_4" value="+ classRoom: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="88" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_5" value="+ grade: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="108" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_6" value="+ parentContact: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="128" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_7" value="+ schoolCensusCode: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="148" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="168" width="270" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_student_m1" value="+ getAttendanceRate(): number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_student">
+          <mxGeometry y="174" width="270" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ParentNotification (Blue) -->
+        <mxCell id="c_parentnotif" value="ParentNotification" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="630" y="350" width="260" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="28" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_2" value="+ studentId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="48" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_3" value="+ studentName: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="68" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_4" value="+ status: AttendanceStatus" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="88" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_5" value="+ message: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="108" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_6" value="+ type: attendance | general" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="128" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="150" width="260" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_parentnotif_m1" value="+ markAsRead(): void" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_parentnotif">
+          <mxGeometry y="158" width="260" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Notice (Blue) -->
+        <mxCell id="c_notice" value="Notice" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="930" y="350" width="260" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="28" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_2" value="+ title: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="48" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_3" value="+ body: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="68" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_4" value="+ targetRole: NoticeTargetRole" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="88" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_5" value="+ targetClassRoom?: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="108" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_6" value="+ schoolCensusCode?: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="128" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="150" width="260" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_notice_m1" value="+ isRelevantTo(u: User): boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_notice">
+          <mxGeometry y="158" width="260" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--         TIER 3: ACADEMIC & OPERATIONAL TRANSACTIONS            -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- LeaveRequest (Green) -->
+        <mxCell id="c_leave" value="LeaveRequest" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="610" width="290" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="28" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_2" value="+ teacherId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="48" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_3" value="+ applicantRole: 'teacher' | 'principal'" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="68" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_4" value="+ type: LeaveType" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="88" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_5" value="+ isHalfDay: boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="108" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_6" value="+ status: LeaveStatus (pending|approved|rejected)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="128" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_7" value="+ reviewedByRole: 'principal' | 'zonal_admin'" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="148" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_8" value="+ lessonPlanNotes: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="168" width="290" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="190" width="290" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_leave_m1" value="+ calculateDays(): number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_leave">
+          <mxGeometry y="198" width="290" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ProxyAssignment (Green) -->
+        <mxCell id="c_proxy" value="ProxyAssignment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="350" y="610" width="310" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="28" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_2" value="+ date: string (YYYY-MM-DD)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="48" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_3" value="+ period: number (1..8)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="68" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_4" value="+ classRoom: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="88" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_5" value="+ originalTeacherId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="108" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_6" value="+ substituteTeacherId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="128" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_7" value="+ status: ProxyStatus (assigned|completed)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="148" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_8" value="+ matchScore: number (0..100)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="168" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="190" width="310" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxy_m1" value="+ generateShareMessage(): string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_proxy">
+          <mxGeometry y="198" width="310" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- TimetableSlot (Green) -->
+        <mxCell id="c_ttslot" value="TimetableSlot" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="700" y="610" width="250" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_1" value="+ classRoom: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="28" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_2" value="+ dayOfWeek: number (1=Mon..5=Fri)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="48" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_3" value="+ period: number (1..8)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="68" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_4" value="+ subject: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="88" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_5" value="+ teacher: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="108" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_6" value="+ teacherId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="128" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="152" width="250" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ttslot_m1" value="+ getBellSchedule(): SLPeriodSchedule" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_ttslot">
+          <mxGeometry y="160" width="250" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- AttendanceRecord (Green) -->
+        <mxCell id="c_att" value="AttendanceRecord" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="980" y="610" width="230" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_att_1" value="+ id: string [PK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_att">
+          <mxGeometry y="28" width="230" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_att_2" value="+ studentId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_att">
+          <mxGeometry y="48" width="230" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_att_3" value="+ date: string (YYYY-MM-DD)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_att">
+          <mxGeometry y="68" width="230" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_att_4" value="+ status: AttendanceStatus" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_att">
+          <mxGeometry y="88" width="230" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_att_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_att">
+          <mxGeometry y="112" width="230" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_att_m1" value="+ isAbsent(): boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_att">
+          <mxGeometry y="120" width="230" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- TermMark (Green) -->
+        <mxCell id="c_mark" value="TermMark" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="610" width="210" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_mark_1" value="+ studentId: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_mark">
+          <mxGeometry y="28" width="210" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_mark_2" value="+ subject: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_mark">
+          <mxGeometry y="48" width="210" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_mark_3" value="+ term: number (1..3)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_mark">
+          <mxGeometry y="68" width="210" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_mark_4" value="+ marks: number (0..100)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_mark">
+          <mxGeometry y="88" width="210" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_mark_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_mark">
+          <mxGeometry y="112" width="210" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_mark_m1" value="+ getGradeBand(): string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_mark">
+          <mxGeometry y="120" width="210" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--  TIER 4: PREDICTIVE RADAR & SMART PROXY INTELLIGENCE MODELS    -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- ProxyCandidate (Orange) -->
+        <mxCell id="c_cand" value="ProxyCandidate" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="900" width="280" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_1" value="+ teacher: Teacher" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="28" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_2" value="+ matchScore: number (0..100)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="48" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_3" value="+ subjectScore: number (max 45)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="68" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_4" value="+ workloadScore: number (max 35)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="88" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_5" value="+ gradeScore: number (max 20)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="108" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_6" value="+ weeklyProxyCount: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="128" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_7" value="+ isExactSubject: boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="148" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="170" width="280" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cand_m1" value="+ getCandidateSummary(): string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_cand">
+          <mxGeometry y="178" width="280" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- StudentCorrelationProfile (Orange) -->
+        <mxCell id="c_profile" value="StudentCorrelationProfile" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="330" y="900" width="310" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_1" value="+ student: Student" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="28" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_2" value="+ classRoom: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="48" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_3" value="+ overallAttendanceRate: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="68" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_4" value="+ overallRiskLevel: SubjectRiskLevel" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="88" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_5" value="+ subjectRisks: SubjectRisk[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="108" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_6" value="+ patterns: AbsenteeismPattern[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="128" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_7" value="+ predictedAverageMark: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="148" width="310" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="170" width="310" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_profile_m1" value="+ getCriticalSubjects(): SubjectRisk[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_profile">
+          <mxGeometry y="178" width="310" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- SubjectRisk (Orange) -->
+        <mxCell id="c_subrisk" value="SubjectRisk" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="670" y="900" width="270" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_1" value="+ subject: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="28" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_2" value="+ attendanceRate: number (%)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="48" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_3" value="+ latestMark: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="68" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_4" value="+ predictedMark: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="88" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_5" value="+ predictedDrop: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="108" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_6" value="+ riskLevel: SubjectRiskLevel" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="128" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_7" value="+ regressionSlope: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="148" width="270" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="170" width="270" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_subrisk_m1" value="+ getRiskIndicator(): string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_subrisk">
+          <mxGeometry y="178" width="270" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- AbsenteeismPattern (Orange) -->
+        <mxCell id="c_pattern" value="AbsenteeismPattern" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="970" y="900" width="250" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_1" value="+ dayOfWeek: number (1..5)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="28" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_2" value="+ dayName: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="48" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_3" value="+ period: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="68" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_4" value="+ subject: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="88" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_5" value="+ occurrences: number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="108" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_6" value="+ severity: moderate | high | critical" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="128" width="250" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="150" width="250" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_pattern_m1" value="+ getPatternDescription(): string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_pattern">
+          <mxGeometry y="158" width="250" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--  TIER 5: SERVICES, ENGINES & OFFLINE ARCHITECTURE              -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- DatabaseService (Red) -->
+        <mxCell id="c_dbservice" value="DatabaseService" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1180" width="320" height="310" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_1" value="- usersCol, studentsCol, teachersCol" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="28" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_2" value="- attendanceCol, marksCol, leaveCol" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="46" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_3" value="- timetableCol, noticesCol, classesCol" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="64" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_4" value="- proxyCol, schoolsCol, keyReqCol" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="82" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="100" width="320" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m1" value="+ createUser(u: User): Promise&lt;void&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="108" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m2" value="+ getTeachers(): Promise&lt;Teacher[]&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="126" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m3" value="+ getStudents(classRoom?): Promise&lt;Student[]&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="144" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m4" value="+ saveAttendance(records): Promise&lt;void&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="162" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m5" value="+ submitLeaveRequest(req): Promise&lt;void&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="180" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m6" value="+ getTimetableSlots(): Promise&lt;TimetableSlot[]&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="198" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m7" value="+ batchCreateProxyAssignments(p): Promise&lt;void&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="216" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m8" value="+ submitKeyRequest(req): Promise&lt;void&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="234" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m9" value="+ createNotice(n: Notice): Promise&lt;void&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="252" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_dbservice_m10" value="+ replayOfflineQueue(): Promise&lt;SyncResult&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_dbservice">
+          <mxGeometry y="270" width="320" height="18" as="geometry"/>
+        </mxCell>
+
+        <!-- ProxyEngine (Red) -->
+        <mxCell id="c_proxyeng" value="ProxyEngine" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="370" y="1180" width="310" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxyeng_1" value="+ SUBJECT_CLUSTERS: Record&lt;string, string[]&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_proxyeng">
+          <mxGeometry y="28" width="310" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxyeng_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_proxyeng">
+          <mxGeometry y="46" width="310" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxyeng_m1" value="+ getSubjectAffinity(subA, subB): AffinityResult" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_proxyeng">
+          <mxGeometry y="54" width="310" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxyeng_m2" value="+ rankProxyCandidates(params): ProxyCandidate[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_proxyeng">
+          <mxGeometry y="72" width="310" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxyeng_m3" value="+ findAffectedPeriods(params): UncoveredSlots" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_proxyeng">
+          <mxGeometry y="90" width="310" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxyeng_m4" value="+ runAutoAllocationPipeline(params): Result" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_proxyeng">
+          <mxGeometry y="108" width="310" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_proxyeng_m5" value="* Score: Subject(45) + Workload(35) + Grade(20)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=9;fontStyle=2;fontColor=#666666;html=1;" vertex="1" parent="c_proxyeng">
+          <mxGeometry y="130" width="310" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- CorrelationEngine (Red) -->
+        <mxCell id="c_correleng" value="CorrelationEngine" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="710" y="1180" width="320" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_correleng_1" value="+ SUBJECT_SENSITIVITY: Record&lt;string, number&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_correleng">
+          <mxGeometry y="28" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_correleng_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_correleng">
+          <mxGeometry y="46" width="320" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_correleng_m1" value="+ getSLGradeBand(marks): GradeBand" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_correleng">
+          <mxGeometry y="54" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_correleng_m2" value="+ computeStudentProfile(params): CorrelationProfile" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_correleng">
+          <mxGeometry y="72" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_correleng_m3" value="+ computeClassRiskMatrix(...): CorrelationProfile[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_correleng">
+          <mxGeometry y="90" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_correleng_m4" value="+ generateParentAlert(profile): ParentNotification" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_correleng">
+          <mxGeometry y="108" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_correleng_m5" value="* Regression: Marks Lost = f(Absent Periods, R²)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=9;fontStyle=2;fontColor=#666666;html=1;" vertex="1" parent="c_correleng">
+          <mxGeometry y="130" width="320" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- TimetableEngine (Red) -->
+        <mxCell id="c_tteng" value="TimetableEngine" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="1180" width="280" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_tteng_1" value="+ SL_BELL_SCHEDULE: ScheduleItem[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_tteng">
+          <mxGeometry y="28" width="280" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_tteng_2" value="+ SL_OL_8_SUBJECTS: SLCurriculumSubject[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_tteng">
+          <mxGeometry y="46" width="280" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_tteng_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_tteng">
+          <mxGeometry y="64" width="280" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_tteng_m1" value="+ generateClassTimetable(params): TimetableSlot[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_tteng">
+          <mxGeometry y="72" width="280" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_tteng_m2" value="+ generateSchoolTimetables(...): TimetableSlot[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_tteng">
+          <mxGeometry y="90" width="280" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_tteng_m3" value="+ exportTimetableCsv(slots): string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_tteng">
+          <mxGeometry y="108" width="280" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_tteng_m4" value="* Constraints: 8 periods/day, 40/week, Interval" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=9;fontStyle=2;fontColor=#666666;html=1;" vertex="1" parent="c_tteng">
+          <mxGeometry y="130" width="280" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- OfflineQueueManager (Red) -->
+        <mxCell id="c_offline" value="OfflineQueueManager" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1370" y="1180" width="250" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_offline_1" value="- queue: QueuedOperation[]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_offline">
+          <mxGeometry y="28" width="250" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_offline_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_offline">
+          <mxGeometry y="46" width="250" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_offline_m1" value="+ enqueueOperation(op): Promise&lt;void&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_offline">
+          <mxGeometry y="54" width="250" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_offline_m2" value="+ dequeueAll(): Promise&lt;QueuedOp[]&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_offline">
+          <mxGeometry y="72" width="250" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_offline_m3" value="+ getQueueLength(): number" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=10;html=1;" vertex="1" parent="c_offline">
+          <mxGeometry y="90" width="250" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_offline_m4" value="* Uses IndexedDB for offline resilience" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=9;fontStyle=2;fontColor=#666666;html=1;" vertex="1" parent="c_offline">
+          <mxGeometry y="112" width="250" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--  TIER 6: PRESENTATION & APPLICATION STATE LAYER                -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- AuthProvider (Yellow) -->
+        <mxCell id="c_auth" value="AuthProvider" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1550" width="280" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_auth_1" value="+ user: User | null" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_auth">
+          <mxGeometry y="28" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_auth_2" value="+ language: AppLanguage (en|si|ta)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_auth">
+          <mxGeometry y="48" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_auth_3" value="+ loading: boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_auth">
+          <mxGeometry y="68" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_auth_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_auth">
+          <mxGeometry y="88" width="280" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_auth_m1" value="+ login(u, p): Promise&lt;User&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_auth">
+          <mxGeometry y="96" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_auth_m2" value="+ logout(): void" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_auth">
+          <mxGeometry y="116" width="280" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_auth_m3" value="+ setLanguage(lang: AppLanguage): void" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_auth">
+          <mxGeometry y="136" width="280" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ThemeProvider (Yellow) -->
+        <mxCell id="c_theme" value="ThemeProvider" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=28;html=1;collapsible=0;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="330" y="1550" width="220" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_theme_1" value="+ theme: 'light' | 'dark'" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_theme">
+          <mxGeometry y="28" width="220" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_theme_sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=inherit;html=1;" vertex="1" parent="c_theme">
+          <mxGeometry y="48" width="220" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_theme_m1" value="+ toggleTheme(): void" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_theme">
+          <mxGeometry y="56" width="220" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_theme_m2" value="+ setTheme(t: 'light'|'dark'): void" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=6;fontSize=11;html=1;" vertex="1" parent="c_theme">
+          <mxGeometry y="76" width="220" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Screen Components Note (Yellow) -->
+        <mxCell id="c_screens" value="&lt;b&gt;Role-Based Screen Components (16)&lt;/b&gt;&lt;hr size=&quot;1&quot;&gt;&lt;b&gt;Public / Auth:&lt;/b&gt; LoginScreen · SignupScreen · AdminLoginScreen · AboutScreen&lt;br&gt;&lt;b&gt;Principal &amp; Admin:&lt;/b&gt; DashboardScreen · ZonalAdminScreen · ClassManagementScreen · ReportsScreen&lt;br&gt;&lt;b&gt;Academic &amp; Attendance:&lt;/b&gt; AttendanceScreen · PerformanceScreen (Radar) · TimetableScreen · LeaveScreen&lt;br&gt;&lt;b&gt;Student &amp; Parent:&lt;/b&gt; NotificationScreen · ProfileScreen · UniversityAdvisorScreen · EduPubScreen" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;size=15;" vertex="1" parent="1">
+          <mxGeometry x="580" y="1550" width="760" height="140" as="geometry"/>
+        </mxCell>
+
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--                      RELATIONSHIPS & CONNECTORS                -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- 1. User -> UserRole (role aggregation) -->
+        <mxCell id="r_user_role" value="role" style="endArrow=diamondThin;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;fontSize=10;fontColor=#9673a6;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.4;entryDx=0;entryDy=0;" edge="1" source="c_user" target="c_userrole" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 2. User (Principal) -> GovernmentSchool (1 manages 1) -->
+        <mxCell id="r_user_school_prin" value="1 manages (principal) 1" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#4472C4;fontSize=10;fontColor=#4472C4;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" edge="1" source="c_user" target="c_school" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 3. User (Zonal Admin) -> GovernmentSchool (1 oversees 1..*) -->
+        <mxCell id="r_user_school_zone" value="1 oversees (zonal_admin) 1..*" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#7030A0;fontSize=10;fontColor=#7030A0;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" edge="1" source="c_user" target="c_school" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 4. ZonalKeyRequest -> GovernmentSchool (requests key for) -->
+        <mxCell id="r_keyreq_school" value="for censusCode" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#666666;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="c_keyreq" target="c_school" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 5. GovernmentSchool -> SchoolClass (1 contains 1..*) -->
+        <mxCell id="r_school_class" value="1 contains 1..*" style="endArrow=diamond;endFill=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#4472C4;fontSize=10;fontColor=#4472C4;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" edge="1" source="c_school" target="c_class" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 6. User (Teacher) -> Teacher (profile 1:1) -->
+        <mxCell id="r_user_teacher" value="1 teacher profile 1" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#666666;fontSize=10;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_user" target="c_teacher" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 7. User (Student/Parent) -> Student (profile / parent of) -->
+        <mxCell id="r_user_student" value="1 parent / student link 1" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#666666;fontSize=10;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_user" target="c_student" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 8. SchoolClass -> Student (1 contains 0..*) -->
+        <mxCell id="r_class_student" value="1 enrolled 0..*" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#666666;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.9;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_class" target="c_student" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 9. SchoolClass -> Teacher (homeroom teacher) -->
+        <mxCell id="r_class_teacher" value="homeroom 0..1" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#666666;fontSize=10;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_class" target="c_teacher" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 10. Student -> ParentNotification (1 triggers 0..*) -->
+        <mxCell id="r_student_notif" value="1 triggers 0..*" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#666666;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="c_student" target="c_parentnotif" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 11. Teacher -> LeaveRequest (1 submits 0..*) -->
+        <mxCell id="r_teacher_leave" value="1 submits 0..*" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#385723;fontSize=10;fontColor=#385723;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_teacher" target="c_leave" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 12. Teacher -> TimetableSlot (1 teaches 0..*) -->
+        <mxCell id="r_teacher_ttslot" value="1 teaches 0..*" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#385723;fontSize=10;fontColor=#385723;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_teacher" target="c_ttslot" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 13. Student -> AttendanceRecord (1 recorded 0..*) -->
+        <mxCell id="r_student_att" value="1 has 0..*" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#385723;fontSize=10;fontColor=#385723;exitX=0.4;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_student" target="c_att" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 14. Student -> TermMark (1 scored 0..*) -->
+        <mxCell id="r_student_mark" value="1 scored 0..*" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#385723;fontSize=10;fontColor=#385723;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="c_student" target="c_mark" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 15. LeaveRequest -> ProxyAssignment (approved leave triggers proxy) -->
+        <mxCell id="r_leave_proxy" value="approved leave triggers" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#385723;fontSize=10;fontColor=#385723;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="c_leave" target="c_proxy" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 16. ProxyEngine -> ProxyCandidate (evaluates & ranks) -->
+        <mxCell id="r_proxyeng_cand" value="ranks compatibility" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#C55A11;fontSize=10;fontColor=#C55A11;exitX=0.3;exitY=0;exitDx=0;exitDy=0;entryX=0.7;entryY=1;entryDx=0;entryDy=0;" edge="1" source="c_proxyeng" target="c_cand" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 17. ProxyEngine -> ProxyAssignment (generates substitutions) -->
+        <mxCell id="r_proxyeng_assign" value="generates allocations" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#385723;fontSize=10;fontColor=#385723;exitX=0.7;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" source="c_proxyeng" target="c_proxy" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 18. CorrelationEngine -> StudentCorrelationProfile (computes) -->
+        <mxCell id="r_correl_prof" value="computes predictive radar" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#C55A11;fontSize=10;fontColor=#C55A11;exitX=0.3;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" source="c_correleng" target="c_profile" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 19. StudentCorrelationProfile -> SubjectRisk (contains 1..*) -->
+        <mxCell id="r_prof_subrisk" value="1 contains 1..*" style="endArrow=diamond;endFill=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#C55A11;fontSize=10;fontColor=#C55A11;exitX=1;exitY=0.4;exitDx=0;exitDy=0;entryX=0;entryY=0.4;entryDx=0;entryDy=0;" edge="1" source="c_profile" target="c_subrisk" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 20. StudentCorrelationProfile -> AbsenteeismPattern (contains 0..*) -->
+        <mxCell id="r_prof_pattern" value="identifies patterns" style="endArrow=open;endFill=0;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#C55A11;fontSize=10;fontColor=#C55A11;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;" edge="1" source="c_profile" target="c_pattern" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 21. CorrelationEngine -> ParentNotification (dispatches high-risk SMS/alert) -->
+        <mxCell id="r_correl_notif" value="dispatches alert" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#4472C4;fontSize=10;exitX=0.8;exitY=0;exitDx=0;exitDy=0;entryX=0.8;entryY=1;entryDx=0;entryDy=0;" edge="1" source="c_correleng" target="c_parentnotif" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 22. TimetableEngine -> TimetableSlot (generates 40 slots/class) -->
+        <mxCell id="r_tteng_slot" value="generates 40 slots/class" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#385723;fontSize=10;fontColor=#385723;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.8;entryY=1;entryDx=0;entryDy=0;" edge="1" source="c_tteng" target="c_ttslot" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 23. DatabaseService -> OfflineQueueManager (queues offline mutations) -->
+        <mxCell id="r_db_offline" value="queues offline mutations" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#C00000;fontSize=10;fontColor=#C00000;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="c_dbservice" target="c_offline" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 24. AuthProvider -> DatabaseService (authenticates via) -->
+        <mxCell id="r_auth_db" value="authenticates &amp; reads" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" source="c_auth" target="c_dbservice" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 25. AuthProvider -> User (holds active session) -->
+        <mxCell id="r_auth_user" value="holds active User session" style="endArrow=open;endFill=0;dashed=1;html=1;edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#666666;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;" edge="1" source="c_auth" target="c_user" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="-20" y="1635"/>
+              <mxPoint x="-20" y="248"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

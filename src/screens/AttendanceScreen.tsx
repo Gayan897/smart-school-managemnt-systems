@@ -1587,24 +1587,36 @@ export default function AttendanceScreen() {
 
       {/* Relevant Class Information & Date Selection */}
       <div className="card" style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', alignItems: 'center' }}>
           <div>
-            <label className="form-label" style={{ marginBottom: '8px' }}>{t('assignedClass', language)}</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', minHeight: '44px' }}>
-              <GraduationCap size={20} style={{ color: 'var(--primary-color)' }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
-                  {currentClassObj ? `${t('grade', language)} ${currentClassObj.grade}${currentClassObj.section}` : (selectedClass || t('noTeacherAssigned', language))}
-                </span>
-                {currentClassObj && (
-                  <span className="badge badge-primary" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                    {currentClassObj.stream === 'ol' ? t('olStream', language) : t('alStream', language)}
-                  </span>
-                )}
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                  {students.length} Student{students.length !== 1 ? 's' : ''} Enrolled
-                </span>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label className="form-label" style={{ margin: 0, fontWeight: 700 }}>
+                {user?.isClassTeacher || (user?.classRoom && user.classRoom !== 'Not assigned') ? '🏫 My Class / Active Class' : '📚 Select Teaching Class'}
+              </label>
+              <span className="badge badge-secondary" style={{ fontSize: '10.5px' }}>
+                {user?.isClassTeacher || (user?.classRoom && user.classRoom !== 'Not assigned')
+                  ? `Class Teacher (${user.classRoom})`
+                  : `Subject Teacher${user?.subject ? ` · ${user.subject}` : ''}`}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <select
+                id="teacher-class-select"
+                className="form-control"
+                value={selectedClass}
+                onChange={e => setSelectedClass(e.target.value)}
+                style={{ minHeight: '44px', fontWeight: 600, fontSize: '14px' }}
+              >
+                {classes.map(cls => (
+                  <option key={cls.id} value={cls.id}>
+                    Class {cls.id} — Grade {cls.grade}{cls.section} ({cls.stream === 'al' ? 'A/L' : 'O/L'})
+                    {cls.homeroomTeacherName ? ` · Homeroom: ${cls.homeroomTeacherName}` : ''}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                <strong>{students.length}</strong> Enrolled
+              </span>
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>

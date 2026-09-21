@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppShell } from './components/AppShell';
 import { TeacherSubjectSetupModal } from './components/TeacherSubjectSetupModal';
+import { isUserSubjectSpecialist } from './data/models';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -59,6 +60,8 @@ function AppRoutes() {
     user?.role === 'teacher' &&
     !hasSeenSubjectPrompt;
 
+  const isSubjectSpecialist = isUserSubjectSpecialist(user);
+
   return (
     <>
       {needsSubjectSetup && <TeacherSubjectSetupModal />}
@@ -112,6 +115,7 @@ function AppRoutes() {
         path="/attendance"
         element={
           !user ? <Navigate to="/login" replace /> :
+          isSubjectSpecialist ? <Navigate to="/dashboard" replace /> :
           <AppShell><AttendanceScreen /></AppShell>
         }
       />
@@ -126,6 +130,7 @@ function AppRoutes() {
         path="/performance"
         element={
           !user ? <Navigate to="/login" replace /> :
+          isSubjectSpecialist ? <Navigate to="/dashboard" replace /> :
           <AppShell><PerformanceScreen /></AppShell>
         }
       />
@@ -133,6 +138,7 @@ function AppRoutes() {
         path="/reports"
         element={
           !user ? <Navigate to="/login" replace /> :
+          isSubjectSpecialist ? <Navigate to="/dashboard" replace /> :
           <AppShell><ReportsScreen /></AppShell>
         }
       />
@@ -161,6 +167,7 @@ function AppRoutes() {
         path="/edupub"
         element={
           !user ? <Navigate to="/login" replace /> :
+          isSubjectSpecialist ? <Navigate to="/dashboard" replace /> :
           <AppShell><EduPubScreen /></AppShell>
         }
       />
