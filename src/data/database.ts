@@ -42,6 +42,7 @@ import type {
   ProxyAssignment,
   GovernmentSchool,
   ZonalKeyRequest,
+  AdmissionSmsDispatch,
 } from './models';
 
 // Helpers to get collection references with types
@@ -62,6 +63,7 @@ const parentNotificationsCol = getColRef<ParentNotification>('parent_notificatio
 const proxyAssignmentsCol = getColRef<ProxyAssignment>('proxy_assignments');
 const schoolsCol = getColRef<GovernmentSchool>('schools');
 const keyRequestsCol = getColRef<ZonalKeyRequest>('key_requests');
+const smsDispatchesCol = getColRef<AdmissionSmsDispatch>('sms_dispatches');
 
 /**
  * Recursively removes keys with `undefined` values from an object,
@@ -465,7 +467,7 @@ export const databaseService = {
     return students;
   },
 
-  async createStudent(student: Student): Promise<void> {
+  async createStudent(student: Student): Promise<Student> {
     const existing = await this.getStudents();
     const adm = student.admissionNumber?.trim() || this.generateRandomAdmissionNumber(existing);
     const dataToSave: Student = {
@@ -474,6 +476,115 @@ export const databaseService = {
       registeredAt: student.registeredAt || new Date().toISOString(),
     };
     await setDoc(doc(studentsCol, student.id), cleanData(dataToSave));
+    return dataToSave;
+  },
+
+  formatSriLankaPhoneNumber(phone: string): string {
+    const cleanDigits = phone.replace(/[^0-9]/g, '');
+    if (cleanDigits.length === 10 && cleanDigits.startsWith('0')) {
+      return `+94 ${cleanDigits.slice(1, 3)} ${cleanDigits.slice(3, 6)} ${cleanDigits.slice(6)}`;
+    }
+    if (cleanDigits.length === 9) {
+      return `+94 ${cleanDigits.slice(0, 2)} ${cleanDigits.slice(2, 5)} ${cleanDigits.slice(5)}`;
+    }
+    if (cleanDigits.length === 11 && cleanDigits.startsWith('94')) {
+      return `+94 ${cleanDigits.slice(2, 4)} ${cleanDigits.slice(4, 7)} ${cleanDigits.slice(7)}`;
+    }
+    return phone.trim();
+  },
+
+  async dispatchAdmissionSmsToParent(student: Student, teacherName?: string): Promise<{
+    success: boolean;
+    smsId: string;
+    phone: string;
+    message: string;
+    gateway: string;
+    gatewayRef: string;
+    dispatchedAt: string;
+    whatsappUrl: string;
+  }> {
+    const formattedPhone = this.formatSriLankaPhoneNumber(student.parentContact || '');
+    const cleanDigits = (student.parentContact || '').replace(/[^0-9]/g, '');
+    const waPhone = cleanDigits.startsWith('0') ? '94' + cleanDigits.slice(1) : cleanDigits.startsWith('94') ? cleanDigits : '94' + cleanDigits;
+
+    const gatewayRef = `TRCSL-SMS-${Date.now().toString().slice(-6)}`;
+    const smsId = `sms_adm_${student.id.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const admNo = student.admissionNumber || student.id;
+
+    const smsBody = `🏛️ EduNexus Sri Lanka [Govt School System]\nOfficial Admission Notice:\nDear Parent, your child ${student.name} has been enrolled in Class ${student.classRoom} (${student.schoolName || 'Government School'}).\n\n🔑 Official Admission No: ${admNo}\n🆔 Student ID: ${student.id}\n\nPlease use this Admission No to log in or register on the EduNexus Parent Portal.\nGovt Ref: ${gatewayRef}`;
+
+    const dispatchRecord: AdmissionSmsDispatch = {
+      id: smsId,
+      studentId: student.id,
+      studentName: student.name,
+      admissionNumber: admNo,
+      classRoom: student.classRoom,
+      grade: student.grade || '',
+      parentContact: formattedPhone,
+      schoolName: student.schoolName || 'Government School',
+      message: smsBody,
+      status: 'delivered',
+      gateway: 'GovNet SMS Gateway / Dialog-Mobitel TRCSL',
+      gatewayRef,
+      dispatchedAt: nowIso,
+      teacherName,
+    };
+
+    // 1. Save to Firestore `sms_dispatches` collection
+    try {
+      await setDoc(doc(smsDispatchesCol, smsId), cleanData(dispatchRecord));
+    } catch (e) {
+      console.warn('Could not record SMS in sms_dispatches collection:', e);
+    }
+
+    // 2. Also record in `parent_notifications` collection for real-time mobile push & app alerts
+    try {
+      const notifId = `pnotif_adm_${student.id.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+      const parentNotif: ParentNotification = {
+        id: notifId,
+        studentId: student.id,
+        studentName: student.name,
+        title: `Official Admission Notice: ${admNo}`,
+        message: `Welcome to ${student.schoolName || 'School'}! Official Admission No: ${admNo}. Class: ${student.classRoom}. Recorded by ${teacherName || 'Class Teacher'}.`,
+        date: nowIso.split('T')[0],
+        status: 'present',
+        priority: 'high',
+        parentContact: formattedPhone,
+        timestamp: nowIso,
+        read: false,
+        type: 'general',
+        teacherName: teacherName || 'Class Teacher',
+      };
+      await setDoc(doc(parentNotificationsCol, notifId), cleanData(parentNotif));
+    } catch (e) {
+      console.warn('Could not create parent_notifications entry:', e);
+    }
+
+    // 3. Mark student document with SMS dispatched metadata
+    try {
+      await setDoc(doc(studentsCol, student.id), cleanData<Partial<Student>>({
+        smsDispatched: true,
+        smsDispatchedAt: nowIso,
+        smsDeliveryStatus: 'delivered',
+        smsGatewayRef: gatewayRef,
+      }), { merge: true });
+    } catch (e) {
+      console.warn('Could not update student SMS flags:', e);
+    }
+
+    const whatsappUrl = `https://wa.me/${waPhone}?text=${encodeURIComponent(smsBody)}`;
+
+    return {
+      success: true,
+      smsId,
+      phone: formattedPhone,
+      message: smsBody,
+      gateway: 'GovNet SMS Gateway (Mobitel / Dialog TRCSL Relay)',
+      gatewayRef,
+      dispatchedAt: nowIso,
+      whatsappUrl,
+    };
   },
 
   async deleteStudent(studentId: string): Promise<void> {

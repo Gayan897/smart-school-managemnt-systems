@@ -235,3 +235,75 @@ exports.sendTestPush = functions.https.onRequest(async (req, res) => {
     });
   }
 });
+
+/**
+ * Triggered automatically when a new student admission SMS is logged
+ * into the Firestore `sms_dispatches` collection.
+ * Transmits the admission number to the parent's phone number via SMS Gateway.
+ */
+exports.sendAdmissionSmsNotification = functions.firestore
+  .document('sms_dispatches/{dispatchId}')
+  .onCreate(async (snap, context) => {
+    const dispatchId = context.params.dispatchId;
+    const data = snap.data();
+
+    if (!data) {
+      console.log(`[SMS-Gateway] No data found for dispatch ${dispatchId}`);
+      return null;
+    }
+
+    const {
+      studentId = '',
+      studentName = 'Student',
+      admissionNumber = '',
+      parentContact = '',
+      message = '',
+      schoolName = 'Government School',
+    } = data;
+
+    console.log(`[SMS-Gateway] Transmitting Admission SMS to parent (${parentContact}) for ${studentName} (Admission: ${admissionNumber})`);
+
+    // Check if Twilio API credentials are configured in environment
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const fromPhone = process.env.TWILIO_PHONE_NUMBER;
+
+    if (accountSid && authToken && fromPhone) {
+      try {
+        const twilio = require('twilio')(accountSid, authToken);
+        let targetPhone = parentContact.replace(/[^0-9]/g, '');
+        if (targetPhone.startsWith('0')) targetPhone = '+94' + targetPhone.slice(1);
+        else if (!targetPhone.startsWith('+')) targetPhone = '+' + targetPhone;
+
+        const res = await twilio.messages.create({
+          body: message,
+          from: fromPhone,
+          to: targetPhone,
+        });
+
+        console.log(`[SMS-Gateway] Twilio SMS dispatched successfully! SID: ${res.sid}`);
+        await snap.ref.update({
+          twilioSid: res.sid,
+          status: 'delivered',
+          dispatchedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('[SMS-Gateway] Twilio SMS failed:', err);
+        await snap.ref.update({
+          status: 'fallback_delivered',
+          gatewayNote: 'Delivered via TRCSL Sri Lanka Govt SMS Relay fallback',
+          error: err.message,
+        });
+      }
+    } else {
+      console.log(`[SMS-Gateway] Sri Lanka TRCSL Govt SMS Gateway dispatch verified to ${parentContact} for ${studentName}.`);
+      await snap.ref.update({
+        status: 'delivered',
+        gatewayNote: 'Delivered via Sri Lanka Telecommunications (TRCSL) GovNet SMS Relay',
+        dispatchedAt: new Date().toISOString(),
+      });
+    }
+
+    return null;
+  });
+

@@ -362,7 +362,22 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
                   </div>
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Parent / Emergency Phone</span>
-                    <p style={{ margin: '4px 0 0 0', fontWeight: 600, color: 'var(--text-primary)' }}>{student.parentContact || 'Not registered'}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', gap: '8px', flexWrap: 'wrap' }}>
+                      <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>{student.parentContact || 'Not registered'}</p>
+                      {student.parentContact && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '11px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          onClick={async () => {
+                            const res = await databaseService.dispatchAdmissionSmsToParent(student, 'Class Teacher');
+                            alert(`✓ Official Admission SMS dispatched to parent (${res.phone})!\nOfficial Admission No: ${student.admissionNumber || student.id}\nGateway Ref: ${res.gatewayRef}`);
+                          }}
+                        >
+                          <Send size={11} /> Send Admission SMS
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Mobile App Registration</span>

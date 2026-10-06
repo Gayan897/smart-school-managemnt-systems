@@ -180,6 +180,27 @@ export interface Student {
   registeredAt?: string;
   isStudentRegistered?: boolean;
   isParentRegistered?: boolean;
+  smsDispatched?: boolean;
+  smsDispatchedAt?: string;
+  smsDeliveryStatus?: 'delivered' | 'pending' | 'failed';
+  smsGatewayRef?: string;
+}
+
+export interface AdmissionSmsDispatch {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNumber: string;
+  classRoom: string;
+  grade: string;
+  parentContact: string;
+  schoolName?: string;
+  message: string;
+  status: 'delivered' | 'pending' | 'failed';
+  gateway: string;
+  gatewayRef: string;
+  dispatchedAt: string;
+  teacherName?: string;
 }
 
 export interface Teacher {
