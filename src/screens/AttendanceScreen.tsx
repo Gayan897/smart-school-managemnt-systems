@@ -1990,15 +1990,13 @@ Govt Ref: TRCSL-SMS-GOVNET`}
               </div>
 
               {/* Quick Parent Notification Actions */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
                 <a
                   href={admissionSmsDetails?.whatsappUrl || `https://wa.me/${recentlyAddedStudent.parentContact.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(admissionSmsDetails?.message || '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn"
                   style={{
-                    flex: 1,
-                    minWidth: '160px',
                     background: '#25D366',
                     color: '#ffffff',
                     border: 'none',
@@ -2008,13 +2006,37 @@ Govt Ref: TRCSL-SMS-GOVNET`}
                     gap: '6px',
                     fontWeight: 700,
                     fontSize: '12px',
-                    padding: '8px 12px',
+                    padding: '9px 12px',
                     borderRadius: '6px',
                     textDecoration: 'none',
                     boxShadow: '0 2px 8px rgba(37, 211, 102, 0.25)',
                   }}
+                  title="Opens WhatsApp to instantly send official message directly to parent's phone"
                 >
                   <MessageCircle size={15} /> Send via WhatsApp
+                </a>
+
+                <a
+                  href={`sms:${recentlyAddedStudent.parentContact.replace(/[^0-9+]/g, '')}?&body=${encodeURIComponent(admissionSmsDetails?.message || `EduNexus: Admission #${recentlyAddedStudent.admissionNumber || recentlyAddedStudent.id} for ${recentlyAddedStudent.name}`)}`}
+                  className="btn"
+                  style={{
+                    background: '#0284c7',
+                    color: '#ffffff',
+                    border: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    padding: '9px 12px',
+                    borderRadius: '6px',
+                    textDecoration: 'none',
+                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)',
+                  }}
+                  title="Opens your device Messages app to send SMS directly from your SIM card"
+                >
+                  <Smartphone size={15} /> Send Device SMS
                 </a>
 
                 <button
@@ -2023,17 +2045,16 @@ Govt Ref: TRCSL-SMS-GOVNET`}
                   onClick={() => handleResendAdmissionSms(recentlyAddedStudent)}
                   disabled={resendingSms}
                   style={{
-                    flex: 1,
-                    minWidth: '140px',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '6px',
                     fontSize: '12px',
-                    padding: '8px 12px',
+                    padding: '9px 12px',
                   }}
+                  title="Triggers cloud telecommunication gateway relay"
                 >
-                  <Send size={13} /> {resendingSms ? 'Transmitting...' : 'Resend SMS Gateway'}
+                  <Send size={13} /> {resendingSms ? 'Transmitting...' : 'Cloud SMS Relay'}
                 </button>
               </div>
 
