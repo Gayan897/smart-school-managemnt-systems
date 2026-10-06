@@ -1828,9 +1828,9 @@ export default function AttendanceScreen() {
                             setRecentlyAddedStudent(s);
                             databaseService.dispatchAdmissionSmsToParent(s, user?.name).then(res => setAdmissionSmsDetails(res)).catch(() => {});
                           }}
-                          title="Parent Admission SMS Dispatch & WhatsApp"
+                          title="Parent Admission SMS Dispatch"
                         >
-                          <MessageCircle size={13} />
+                          <Send size={13} />
                         </button>
                         <button
                           type="button"
@@ -2005,72 +2005,26 @@ Govt Ref: TRCSL-SMS-GOVNET`}
                 </div>
               </div>
 
-              {/* Quick Parent Notification Actions */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
-                <a
-                  href={admissionSmsDetails?.whatsappUrl || `https://wa.me/${recentlyAddedStudent.parentContact.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(admissionSmsDetails?.message || '')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn"
-                  style={{
-                    background: '#25D366',
-                    color: '#ffffff',
-                    border: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    padding: '9px 12px',
-                    borderRadius: '6px',
-                    textDecoration: 'none',
-                    boxShadow: '0 2px 8px rgba(37, 211, 102, 0.25)',
-                  }}
-                  title="Opens WhatsApp to instantly send official message directly to parent's phone"
-                >
-                  <MessageCircle size={15} /> Send via WhatsApp
-                </a>
-
-                <a
-                  href={`sms:${recentlyAddedStudent.parentContact.replace(/[^0-9+]/g, '')}?&body=${encodeURIComponent(admissionSmsDetails?.message || `EduNexus: Admission #${recentlyAddedStudent.admissionNumber || recentlyAddedStudent.id} for ${recentlyAddedStudent.name}`)}`}
-                  className="btn"
-                  style={{
-                    background: '#0284c7',
-                    color: '#ffffff',
-                    border: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    padding: '9px 12px',
-                    borderRadius: '6px',
-                    textDecoration: 'none',
-                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)',
-                  }}
-                  title="Opens your device Messages app to send SMS directly from your SIM card"
-                >
-                  <Smartphone size={15} /> Send Device SMS
-                </a>
-
+              {/* Parent SMS Notification Actions */}
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn btn-primary"
                   onClick={() => handleResendAdmissionSms(recentlyAddedStudent)}
                   disabled={resendingSms}
                   style={{
+                    flex: 1,
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px',
-                    fontSize: '12px',
-                    padding: '9px 12px',
+                    gap: '8px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    padding: '10px 16px',
                   }}
-                  title="Triggers cloud telecommunication gateway relay"
+                  title="Triggers live Notify.lk / Cloud SMS Gateway dispatch"
                 >
-                  <Send size={13} /> {resendingSms ? 'Transmitting...' : 'Cloud SMS Relay'}
+                  <Send size={15} /> {resendingSms ? 'Transmitting SMS...' : 'Resend Live SMS to Parent'}
                 </button>
               </div>
 
