@@ -631,6 +631,89 @@ export default function PerformanceScreen() {
     });
   }, [isPrincipal, filteredClasses, allStudents, marks, selectedSubject, selectedTerm]);
 
+  // ─── Principal: School-Wide Low Performance Students ───
+  interface PrincipalLowPerformanceItem {
+    student: Student;
+    classId: string;
+    grade: number;
+    section: string;
+    avgMarks: number;
+    gradeLabel: string;
+    totalMarks: number;
+    subjectsCount: number;
+    weakSubjects: { subject: string; marks: number; grade: string }[];
+    riskLevel: 'critical' | 'at_risk' | 'borderline';
+    riskColor: string;
+  }
+
+  const principalLowPerformanceStudents = useMemo<PrincipalLowPerformanceItem[]>(() => {
+    if (!isPrincipal) return [];
+
+    const flagged: PrincipalLowPerformanceItem[] = [];
+
+    filteredClasses.forEach(cls => {
+      const classStudents = allStudents.filter(s => s.classRoom === cls.id);
+
+      classStudents.forEach(student => {
+        const stuMarks = marks.filter(m => m.studentId === student.id && m.term === selectedTerm);
+        if (stuMarks.length === 0) return;
+
+        const totalMarks = stuMarks.reduce((sum, m) => sum + m.marks, 0);
+        const subjectsCount = stuMarks.length;
+        const avgMarks = subjectsCount > 0 ? Math.round((totalMarks / subjectsCount) * 10) / 10 : 0;
+        const gradeLabel = avgMarks >= 75 ? 'A' : avgMarks >= 65 ? 'B' : avgMarks >= 55 ? 'C' : avgMarks >= 35 ? 'S' : 'F';
+
+        // Find weak subjects below threshold
+        const weakSubjects: { subject: string; marks: number; grade: string }[] = [];
+        stuMarks.forEach(m => {
+          if (m.marks < lowMarksThreshold) {
+            const gr = m.marks >= 75 ? 'A' : m.marks >= 65 ? 'B' : m.marks >= 55 ? 'C' : m.marks >= 35 ? 'S' : 'F';
+            const subObj = SRI_LANKA_SUBJECTS.find(s => s.id === m.subject);
+            weakSubjects.push({
+              subject: subObj ? subObj.nameEn : m.subject,
+              marks: m.marks,
+              grade: gr,
+            });
+          }
+        });
+
+        // Flag if average is below threshold OR has weak subjects
+        if (avgMarks < lowMarksThreshold || weakSubjects.length > 0) {
+          let riskLevel: 'critical' | 'at_risk' | 'borderline' = 'borderline';
+          let riskColor = '#d97706';
+          if (avgMarks <= 20 || weakSubjects.some(w => w.marks <= 20)) {
+            riskLevel = 'critical';
+            riskColor = '#ef4444';
+          } else if (avgMarks <= 35 || weakSubjects.some(w => w.marks <= 35)) {
+            riskLevel = 'at_risk';
+            riskColor = '#f97316';
+          }
+
+          flagged.push({
+            student,
+            classId: cls.id,
+            grade: cls.grade,
+            section: cls.section,
+            avgMarks,
+            gradeLabel,
+            totalMarks,
+            subjectsCount,
+            weakSubjects: weakSubjects.sort((a, b) => a.marks - b.marks),
+            riskLevel,
+            riskColor,
+          });
+        }
+      });
+    });
+
+    // Sort: critical first, then at_risk, then borderline; within same level sort by avg ascending
+    const riskOrder = { critical: 0, at_risk: 1, borderline: 2 };
+    return flagged.sort((a, b) => {
+      if (riskOrder[a.riskLevel] !== riskOrder[b.riskLevel]) return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
+      return a.avgMarks - b.avgMarks;
+    });
+  }, [isPrincipal, filteredClasses, allStudents, marks, selectedTerm, lowMarksThreshold]);
+
   // Chart data
   const chartData = isPrincipal
     ? classWisePerformance.map(cp => ({
@@ -822,6 +905,313 @@ export default function PerformanceScreen() {
             </div>
           )}
         </div>
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* LOW PERFORMANCE STUDENTS — School-Wide for Principal          */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+
+        {/* ── Threshold Configuration Card ── */}
+        <div className="card" style={{
+          marginTop: '28px',
+          background: 'linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(249,115,22,0.04) 100%)',
+          border: '1.5px solid rgba(239, 68, 68, 0.2)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                <AlertCircle size={20} style={{ color: '#ef4444' }} />
+                Low Performance Students — School Overview
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--text-muted)' }}>
+                Students across {selectedGrade === 'all' ? 'all grades' : `Grade ${selectedGrade}`} scoring below the threshold in Term {selectedTerm}
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Sliders size={14} style={{ color: '#ef4444' }} />
+                <input
+                  type="range"
+                  min={10}
+                  max={55}
+                  step={5}
+                  value={lowMarksThreshold}
+                  onChange={e => setLowMarksThreshold(Number(e.target.value))}
+                  style={{ width: '140px', cursor: 'pointer', accentColor: '#ef4444' }}
+                />
+                <span style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  padding: '5px 14px',
+                  borderRadius: '20px',
+                  fontWeight: 800,
+                  fontSize: '14px',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  minWidth: '60px',
+                  textAlign: 'center',
+                }}>
+                  &lt; {lowMarksThreshold}%
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Summary Stats Cards ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '16px' }}>
+          {/* Total At-Risk Students */}
+          <div className="card" style={{
+            background: 'linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 100%)',
+            border: '1.5px solid rgba(239, 68, 68, 0.25)',
+            padding: '18px 20px',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#ef4444', fontWeight: 700, marginBottom: '6px' }}>Total At-Risk Students</div>
+            <div style={{ fontSize: '32px', fontWeight: 900, color: principalLowPerformanceStudents.length > 0 ? '#ef4444' : 'var(--text-muted)' }}>
+              {principalLowPerformanceStudents.length}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              across {selectedGrade === 'all' ? 'all classes' : `Grade ${selectedGrade} classes`}
+            </div>
+          </div>
+
+          {/* Critical Count */}
+          <div className="card" style={{
+            background: 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.04) 100%)',
+            border: '1.5px solid rgba(239, 68, 68, 0.35)',
+            padding: '18px 20px',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#dc2626', fontWeight: 700, marginBottom: '6px' }}>Critical (≤ 20%)</div>
+            <div style={{ fontSize: '32px', fontWeight: 900, color: '#dc2626' }}>
+              {principalLowPerformanceStudents.filter(s => s.riskLevel === 'critical').length}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Need urgent attention
+            </div>
+          </div>
+
+          {/* At Risk Count */}
+          <div className="card" style={{
+            background: 'linear-gradient(135deg, rgba(249,115,22,0.08) 0%, rgba(249,115,22,0.02) 100%)',
+            border: '1.5px solid rgba(249, 115, 22, 0.3)',
+            padding: '18px 20px',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#f97316', fontWeight: 700, marginBottom: '6px' }}>At Risk (≤ 35%)</div>
+            <div style={{ fontSize: '32px', fontWeight: 900, color: '#f97316' }}>
+              {principalLowPerformanceStudents.filter(s => s.riskLevel === 'at_risk').length}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Below pass mark
+            </div>
+          </div>
+
+          {/* Avg of Flagged */}
+          <div className="card" style={{
+            background: 'linear-gradient(135deg, rgba(217,119,6,0.08) 0%, rgba(217,119,6,0.02) 100%)',
+            border: '1.5px solid rgba(217, 119, 6, 0.3)',
+            padding: '18px 20px',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#d97706', fontWeight: 700, marginBottom: '6px' }}>Avg of Flagged Students</div>
+            <div style={{ fontSize: '32px', fontWeight: 900, color: '#d97706' }}>
+              {principalLowPerformanceStudents.length > 0
+                ? Math.round(principalLowPerformanceStudents.reduce((sum, s) => sum + s.avgMarks, 0) / principalLowPerformanceStudents.length)
+                : '—'}%
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Average performance
+            </div>
+          </div>
+        </div>
+
+        {/* ── Low Performance Students Table ── */}
+        <div className="card" style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', paddingBottom: '14px', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '14px' }}>
+            <div>
+              <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={18} style={{ color: '#ef4444' }} />
+                Students Below Threshold — Term {selectedTerm}
+              </h3>
+              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                {principalLowPerformanceStudents.length} student{principalLowPerformanceStudents.length !== 1 ? 's' : ''} flagged across {filteredClasses.length} class{filteredClasses.length !== 1 ? 'es' : ''} • Threshold: &lt; {lowMarksThreshold}%
+              </p>
+            </div>
+          </div>
+
+          {principalLowPerformanceStudents.length === 0 ? (
+            <div style={{
+              padding: '50px 20px',
+              textAlign: 'center',
+              background: 'rgba(16, 185, 129, 0.06)',
+              borderRadius: 'var(--radius-md)',
+              border: '1.5px dashed rgba(16, 185, 129, 0.3)',
+            }}>
+              <CheckCircle2 size={40} style={{ color: '#10b981', marginBottom: '12px' }} />
+              <p style={{ color: '#10b981', fontWeight: 700, fontSize: '16px', margin: '0 0 4px 0' }}>All Students Above Threshold!</p>
+              <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '13px' }}>
+                No students in {selectedGrade === 'all' ? 'any class' : `Grade ${selectedGrade}`} scored below {lowMarksThreshold}% in Term {selectedTerm}.
+                Try adjusting the threshold slider above.
+              </p>
+            </div>
+          ) : (
+            <div className="table-wrapper" style={{ border: 'none', overflowX: 'auto' }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '36px' }}>#</th>
+                    <th style={{ width: '75px', textAlign: 'center' }}>Risk</th>
+                    <th>Student Name</th>
+                    <th>Class</th>
+                    <th>Admission #</th>
+                    <th style={{ textAlign: 'center' }}>Average</th>
+                    <th style={{ textAlign: 'center' }}>Grade</th>
+                    <th>Weak Subjects</th>
+                    <th style={{ textAlign: 'center' }}>Parent Contact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {principalLowPerformanceStudents.map((item, idx) => (
+                    <tr
+                      key={item.student.id}
+                      style={{
+                        background: item.riskLevel === 'critical'
+                          ? 'rgba(239, 68, 68, 0.04)'
+                          : item.riskLevel === 'at_risk'
+                          ? 'rgba(249, 115, 22, 0.03)'
+                          : 'rgba(217, 119, 6, 0.02)',
+                      }}
+                    >
+                      <td style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{idx + 1}</td>
+
+                      {/* Risk Level Badge */}
+                      <td style={{ textAlign: 'center' }}>
+                        <span
+                          className="badge"
+                          style={{
+                            background: item.riskLevel === 'critical'
+                              ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                              : item.riskLevel === 'at_risk'
+                              ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
+                              : 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                            color: '#ffffff',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            fontSize: '10px',
+                            letterSpacing: '0.3px',
+                            boxShadow: `0 2px 6px ${item.riskColor}33`,
+                          }}
+                        >
+                          {item.riskLevel === 'critical' ? '🔴 CRITICAL'
+                            : item.riskLevel === 'at_risk' ? '🟠 AT RISK'
+                            : '🟡 BORDERLINE'}
+                        </span>
+                      </td>
+
+                      {/* Student Name */}
+                      <td>
+                        <button
+                          type="button"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            color: 'inherit',
+                          }}
+                          onClick={() => setSelectedProfileStudentId(item.student.id)}
+                          title="Click to view full student profile"
+                        >
+                          <div style={{ fontWeight: 600, color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                            {item.student.name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {item.student.id}</div>
+                        </button>
+                      </td>
+
+                      {/* Class */}
+                      <td>
+                        <span className="badge badge-secondary" style={{ fontWeight: 700, fontSize: '11px' }}>
+                          Grade {item.grade}{item.section}
+                        </span>
+                      </td>
+
+                      {/* Admission */}
+                      <td>
+                        <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                          {item.student.admissionNumber || item.student.id}
+                        </span>
+                      </td>
+
+                      {/* Average */}
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{ fontWeight: 800, fontSize: '15px', color: item.riskColor }}>
+                          {item.avgMarks}%
+                        </span>
+                      </td>
+
+                      {/* Grade */}
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge ${item.gradeLabel === 'F' ? 'badge-danger' : item.gradeLabel === 'S' ? 'badge-warning' : 'badge-muted'}`} style={{ fontWeight: 800 }}>
+                          {item.gradeLabel}
+                        </span>
+                      </td>
+
+                      {/* Weak Subjects */}
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {item.weakSubjects.slice(0, 4).map((ws, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                background: ws.marks <= 20 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(249, 115, 22, 0.1)',
+                                color: ws.marks <= 20 ? '#dc2626' : '#ea580c',
+                                border: `1px solid ${ws.marks <= 20 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(249, 115, 22, 0.25)'}`,
+                                padding: '2px 7px',
+                                borderRadius: '6px',
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={`${ws.subject}: ${ws.marks}/100`}
+                            >
+                              {ws.subject.length > 12 ? ws.subject.slice(0, 12) + '…' : ws.subject} ({ws.marks})
+                            </span>
+                          ))}
+                          {item.weakSubjects.length > 4 && (
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, padding: '2px 4px' }}>
+                              +{item.weakSubjects.length - 4} more
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Parent Contact */}
+                      <td style={{ textAlign: 'center', fontSize: '12px' }}>
+                        {item.student.parentContact ? (
+                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                            {item.student.parentContact}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Student Profile Modal */}
+        {selectedProfileStudentId && (
+          <StudentProfileModal
+            studentId={selectedProfileStudentId}
+            onClose={() => setSelectedProfileStudentId(null)}
+          />
+        )}
       </div>
     );
   }
