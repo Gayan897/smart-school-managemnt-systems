@@ -277,9 +277,17 @@ export default function SignupScreen() {
     setError('');
 
     try {
-      // 1. Check existing username
-      const existing = await databaseService.getUserByUsername(username.trim());
+      // 1. Check existing username and email
+      const existing = await databaseService.getUserByExactUsername(username.trim());
       if (existing) throw new Error('Username already taken. Please choose another.');
+
+      const cleanEmail = (email.trim() || inviteEmail).toLowerCase();
+      if (cleanEmail) {
+        const existingEmailUser = await databaseService.getUserByEmail(cleanEmail);
+        if (existingEmailUser) {
+          throw new Error(`Email address (${cleanEmail}) is already registered to an existing user.`);
+        }
+      }
 
       const selectedSchool = schools.find(s => s.censusCode === selectedSchoolCode);
 
@@ -367,7 +375,7 @@ export default function SignupScreen() {
         role,
         schoolCensusCode: role === 'zonal_admin' ? 'ZONAL-MOE' : selectedSchoolCode,
         schoolName: role === 'zonal_admin' ? 'Colombo Zonal Education Office' : (selectedSchool?.name || 'Mahinda Rajapaksha College'),
-        ...(email.trim() || inviteEmail ? { email: email.trim() || inviteEmail } : {}),
+        ...(cleanEmail ? { email: cleanEmail } : {}),
         ...(nicNumber.trim() ? { nicNumber: nicNumber.trim().toUpperCase() } : {}),
         ...(sleasNumber.trim() ? { sleasNumber: sleasNumber.trim() } : {}),
         ...(role === 'teacher' ? {

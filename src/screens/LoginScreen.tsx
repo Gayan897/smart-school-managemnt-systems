@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff, Key, ShieldCheck, X, CheckCircle, Lock, LogIn } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, Key, ShieldCheck, X, CheckCircle, Lock, LogIn, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
@@ -63,7 +63,7 @@ export default function LoginScreen() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError('Please enter username and password.');
+      setError('Please enter your email or username and password.');
       return;
     }
     setLoading(true);
@@ -186,15 +186,22 @@ export default function LoginScreen() {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">{t('username', language)}</label>
-              <input
-                id="login-username"
-                className="form-control"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                autoComplete="username"
-                placeholder={t('username', language)}
-              />
+              <label className="form-label">{t('emailOrUsername', language)}</label>
+              <div className="input-wrapper">
+                <input
+                  id="login-username"
+                  className="form-control"
+                  type="text"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  autoComplete="username email"
+                  placeholder={t('emailOrUsernamePlaceholder', language)}
+                />
+                <Mail
+                  size={16}
+                  className="input-icon"
+                />
+              </div>
             </div>
 
             <div className="form-group" style={{ marginBottom: '12px' }}>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, ShieldCheck, Key, Eye, EyeOff, Lock, LogOut } from 'lucide-react';
+import { Building2, ShieldCheck, Key, Eye, EyeOff, Lock, LogOut, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import '../components/AppShell.css';
 import landingBg from '../assets/landing_bg.png';
@@ -18,7 +18,7 @@ export default function AdminLoginScreen() {
   async function handleAdminLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError('Please enter your Zonal Admin username and password.');
+      setError('Please enter your Zonal Admin email or username and password.');
       return;
     }
     setLoading(true);
@@ -126,16 +126,22 @@ export default function AdminLoginScreen() {
           {/* Secure Login Form Only */}
           <form onSubmit={handleAdminLogin}>
             <div className="form-group">
-              <label className="form-label">Zonal Admin Username</label>
-              <input
-                id="admin-username"
-                className="form-control"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="Username (e.g. admin)"
-                autoComplete="username"
-                required
-              />
+              <label className="form-label">Zonal Admin Email or Username</label>
+              <div className="input-wrapper">
+                <input
+                  id="admin-username"
+                  className="form-control"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="Email or Username (e.g. admin or admin@moe.gov.lk)"
+                  autoComplete="username email"
+                  required
+                />
+                <Mail
+                  size={16}
+                  className="input-icon"
+                />
+              </div>
             </div>
 
             <div className="form-group">

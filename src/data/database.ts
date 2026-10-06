@@ -91,6 +91,7 @@ export const PERMANENT_ZONAL_ADMIN: User = {
   id: 'zonal_admin_permanent_master',
   username: 'admin',
   password: 'admin',
+  email: 'admin@moe.gov.lk',
   name: 'Zonal Master Administrator',
   role: 'zonal_admin',
   schoolCensusCode: 'ZONAL-MOE',
@@ -221,9 +222,54 @@ export const databaseService = {
     return u;
   },
 
-  async getUserByUsername(username: string): Promise<User | null> {
+  async getUserByExactUsername(username: string): Promise<User | null> {
     const clean = username.trim();
     if (clean.toLowerCase() === 'admin' || clean.toLowerCase() === 'zonal_admin') {
+      return PERMANENT_ZONAL_ADMIN;
+    }
+    const q = query(usersCol, where('username', '==', clean), limit(1));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data();
+    }
+    return null;
+  },
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const clean = email.trim();
+    if (!clean) return null;
+    if (clean.toLowerCase() === 'admin@moe.gov.lk' || clean.toLowerCase() === 'admin@sams.gov.lk') {
+      return PERMANENT_ZONAL_ADMIN;
+    }
+    // Check normalized lowercase email
+    const qLower = query(usersCol, where('email', '==', clean.toLowerCase()), limit(1));
+    const snapLower = await getDocs(qLower);
+    if (!snapLower.empty) {
+      const u = snapLower.docs[0].data();
+      await this.enrichTeacherUser(u);
+      return u;
+    }
+    // Check exact case if different
+    if (clean !== clean.toLowerCase()) {
+      const qExact = query(usersCol, where('email', '==', clean), limit(1));
+      const snapExact = await getDocs(qExact);
+      if (!snapExact.empty) {
+        const u = snapExact.docs[0].data();
+        await this.enrichTeacherUser(u);
+        return u;
+      }
+    }
+    return null;
+  },
+
+  async getUserByUsername(identifier: string): Promise<User | null> {
+    const clean = identifier.trim();
+    if (
+      clean.toLowerCase() === 'admin' ||
+      clean.toLowerCase() === 'zonal_admin' ||
+      clean.toLowerCase() === 'admin@moe.gov.lk' ||
+      clean.toLowerCase() === 'admin@sams.gov.lk'
+    ) {
       try {
         await setDoc(doc(usersCol, PERMANENT_ZONAL_ADMIN.id), cleanData(PERMANENT_ZONAL_ADMIN), { merge: true });
       } catch (e) {
@@ -231,37 +277,38 @@ export const databaseService = {
       }
       return PERMANENT_ZONAL_ADMIN;
     }
+
+    const processFoundUser = async (u: User): Promise<User> => {
+      if (u.role === 'teacher' && u.nicVerificationStatus === 'pending' && u.verificationUnlockAt && Date.now() >= u.verificationUnlockAt) {
+        u.nicVerificationStatus = 'verified';
+        try {
+          await setDoc(doc(usersCol, u.id), cleanData<Partial<User>>({ nicVerificationStatus: 'verified' }), { merge: true });
+        } catch (e) {
+          console.warn('Failed to update verification status in firestore:', e);
+        }
+      }
+      await this.enrichTeacherUser(u);
+      return u;
+    };
+
+    // 1. Direct username lookup
     const q = query(usersCol, where('username', '==', clean), limit(1));
     const snapshot = await getDocs(q);
     if (!snapshot.empty) {
-      const u = snapshot.docs[0].data();
-      if (u.role === 'teacher' && u.nicVerificationStatus === 'pending' && u.verificationUnlockAt && Date.now() >= u.verificationUnlockAt) {
-        u.nicVerificationStatus = 'verified';
-        try {
-          await setDoc(doc(usersCol, u.id), cleanData<Partial<User>>({ nicVerificationStatus: 'verified' }), { merge: true });
-        } catch (e) {
-          console.warn('Failed to update verification status in firestore:', e);
-        }
-      }
-      await this.enrichTeacherUser(u);
-      return u;
+      return await processFoundUser(snapshot.docs[0].data());
     }
 
-    // Secondary check: look up user by NIC number
+    // 2. Email lookup (case-insensitive)
+    const userByEmail = await this.getUserByEmail(clean);
+    if (userByEmail) {
+      return await processFoundUser(userByEmail);
+    }
+
+    // 3. Secondary check: look up user by NIC number
     const qNic = query(usersCol, where('nicNumber', '==', clean.toUpperCase()), limit(1));
     const snapshotNic = await getDocs(qNic);
     if (!snapshotNic.empty) {
-      const u = snapshotNic.docs[0].data();
-      if (u.role === 'teacher' && u.nicVerificationStatus === 'pending' && u.verificationUnlockAt && Date.now() >= u.verificationUnlockAt) {
-        u.nicVerificationStatus = 'verified';
-        try {
-          await setDoc(doc(usersCol, u.id), cleanData<Partial<User>>({ nicVerificationStatus: 'verified' }), { merge: true });
-        } catch (e) {
-          console.warn('Failed to update verification status in firestore:', e);
-        }
-      }
-      await this.enrichTeacherUser(u);
-      return u;
+      return await processFoundUser(snapshotNic.docs[0].data());
     }
 
     return null;

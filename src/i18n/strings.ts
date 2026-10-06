@@ -14,6 +14,8 @@ const strings: Translations = {
   appFullName: { english: 'EduNexus — Smart Academic Governance & School Management', sinhala: 'EduNexus — ස්මාර්ට් අධ්‍යාපනික සහ පාසල් කළමනාකරණ පද්ධතිය', tamil: 'EduNexus — ஸ்மார்ட் கல்வி மற்றும் பள்ளி மேலாண்மை அமைப்பு' },
   loginTitle: { english: 'Login to EduNexus', sinhala: 'EduNexus වෙත ප්‍රවේශ වන්න', tamil: 'EduNexus இல் உள்நுழைக' },
   username: { english: 'Username', sinhala: 'පරිශීලක නාමය', tamil: 'பயனர் பெயர்' },
+  emailOrUsername: { english: 'Email or Username', sinhala: 'විද්‍යුත් තැපෑල හෝ පරිශීලක නාමය', tamil: 'மின்னஞ்சல் அல்லது பயனர் பெயர்' },
+  emailOrUsernamePlaceholder: { english: 'Enter your email or username', sinhala: 'ඔබගේ විද්‍යුත් තැපෑල හෝ පරිශීලක නාමය ඇතුළත් කරන්න', tamil: 'உங்கள் மின்னஞ்சல் அல்லது பயனர் பெயரை உள்ளிடவும்' },
   password: { english: 'Password', sinhala: 'මුරපදය', tamil: 'கடவுச்சொல்' },
   login: { english: 'Login', sinhala: 'ප්‍රවේශ වන්න', tamil: 'உள்நுழைக' },
   logout: { english: 'Logout', sinhala: 'ඉවත් වන්න', tamil: 'வெளியேறு' },

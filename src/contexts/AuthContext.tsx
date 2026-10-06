@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(`Firebase error: ${msg}`);
     }
-    if (!found) throw new Error('User not found. Please check your username.');
+    if (!found) throw new Error('User not found. Please check your email or username.');
     if (found.password !== password) throw new Error('Incorrect password.');
 
     // Block student and parent roles from web app access

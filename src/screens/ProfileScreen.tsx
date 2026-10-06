@@ -61,7 +61,7 @@ export default function ProfileScreen() {
       if (!user) return;
       const updated = await databaseService.updateUserProfile(user.id, {
         name: name.trim(),
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         classRoom: classRoom.trim(),
         subject: mainSubject.trim(),
         otherSubjects,
