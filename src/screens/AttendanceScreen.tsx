@@ -155,6 +155,12 @@ export default function AttendanceScreen() {
   const [resendingSms, setResendingSms] = useState(false);
   const [smsToast, setSmsToast] = useState<string | null>(null);
 
+  // Notify.lk configuration state
+  const [showNotifyConfig, setShowNotifyConfig] = useState(false);
+  const [notifyUserId, setNotifyUserId] = useState(() => databaseService.getNotifyLkConfig().userId);
+  const [notifyApiKey, setNotifyApiKey] = useState(() => databaseService.getNotifyLkConfig().apiKey);
+  const [notifySenderId, setNotifySenderId] = useState(() => databaseService.getNotifyLkConfig().senderId || 'NotifyDEMO');
+
   // Remove student confirmation state
   const [studentToRemove, setStudentToRemove] = useState<Student | null>(null);
   const [removingStudent, setRemovingStudent] = useState(false);
@@ -435,6 +441,16 @@ export default function AttendanceScreen() {
       setTimeout(() => setSmsToast(null), 4000);
     } finally {
       setResendingSms(false);
+    }
+  }
+
+  function handleSaveNotifyConfig(e: React.FormEvent) {
+    e.preventDefault();
+    databaseService.saveNotifyLkConfig(notifyUserId, notifyApiKey, notifySenderId);
+    setSmsToast('✓ Notify.lk credentials saved! Dispatching live SMS...');
+    setShowNotifyConfig(false);
+    if (recentlyAddedStudent) {
+      handleResendAdmissionSms(recentlyAddedStudent);
     }
   }
 
@@ -2057,6 +2073,72 @@ Govt Ref: TRCSL-SMS-GOVNET`}
                   <Send size={13} /> {resendingSms ? 'Transmitting...' : 'Cloud SMS Relay'}
                 </button>
               </div>
+
+              {/* Notify.lk Configuration Toggle */}
+              <div style={{ marginTop: '14px', borderTop: '1px dashed var(--border)', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                  {notifyUserId && notifyApiKey ? (
+                    <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Notify.lk Connected (User #{notifyUserId})</span>
+                  ) : (
+                    <span>Want automated real SMS? Connect your <strong>Notify.lk</strong> account</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: '11px', padding: '3px 8px', color: 'var(--primary)', fontWeight: 600 }}
+                  onClick={() => setShowNotifyConfig(v => !v)}
+                >
+                  ⚙️ {notifyUserId && notifyApiKey ? 'Change Notify.lk Keys' : 'Configure Notify.lk'}
+                </button>
+              </div>
+
+              {showNotifyConfig && (
+                <form onSubmit={handleSaveNotifyConfig} style={{ marginTop: '10px', background: 'var(--bg-card)', padding: '12px', borderRadius: '8px', border: '1.5px solid var(--primary)', animation: 'fadeIn 0.2s ease-out' }}>
+                  <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '8px', color: 'var(--text-color)' }}>
+                    🇱🇰 Notify.lk API Configuration (From app.notify.lk/settings)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px', fontWeight: 600 }}>User ID *</label>
+                      <input
+                        className="form-control"
+                        style={{ fontSize: '12px', padding: '6px 8px' }}
+                        placeholder="e.g. 12345"
+                        value={notifyUserId}
+                        onChange={e => setNotifyUserId(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Sender ID</label>
+                      <input
+                        className="form-control"
+                        style={{ fontSize: '12px', padding: '6px 8px' }}
+                        placeholder="NotifyDEMO"
+                        value={notifySenderId}
+                        onChange={e => setNotifySenderId(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px', fontWeight: 600 }}>API Key *</label>
+                    <input
+                      className="form-control"
+                      type="password"
+                      style={{ fontSize: '12px', padding: '6px 8px' }}
+                      placeholder="Paste your Notify.lk API Key"
+                      value={notifyApiKey}
+                      onChange={e => setNotifyApiKey(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowNotifyConfig(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary btn-sm">Save & Send Live SMS</button>
+                  </div>
+                </form>
+              )}
 
               {smsToast && (
                 <div style={{ marginTop: '10px', fontSize: '11px', color: '#059669', fontWeight: 600, textAlign: 'center' }}>

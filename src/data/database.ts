@@ -514,6 +514,44 @@ export const databaseService = {
 
     const smsBody = `🏛️ EduNexus Sri Lanka [Govt School System]\nOfficial Admission Notice:\nDear Parent, your child ${student.name} has been enrolled in Class ${student.classRoom} (${student.schoolName || 'Government School'}).\n\n🔑 Official Admission No: ${admNo}\n🆔 Student ID: ${student.id}\n\nPlease use this Admission No to log in or register on the EduNexus Parent Portal.\nGovt Ref: ${gatewayRef}`;
 
+    // Check if Notify.lk credentials are configured (in localStorage or .env)
+    const notifyConfig = this.getNotifyLkConfig();
+    let actualGateway = 'GovNet SMS Gateway / Dialog-Mobitel TRCSL';
+    let deliveryStatus: 'delivered' | 'pending' | 'failed' = 'delivered';
+
+    if (notifyConfig.userId && notifyConfig.apiKey) {
+      try {
+        const targetNotifyPhone = cleanDigits.startsWith('0') ? '94' + cleanDigits.slice(1) : cleanDigits.startsWith('94') ? cleanDigits : '94' + cleanDigits;
+        const formBody = new URLSearchParams({
+          user_id: String(notifyConfig.userId).trim(),
+          api_key: String(notifyConfig.apiKey).trim(),
+          sender_id: String(notifyConfig.senderId || 'NotifyDEMO').trim(),
+          to: targetNotifyPhone,
+          message: smsBody,
+        });
+
+        // Use local proxy in development or direct Notify.lk API
+        const endpoint = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+          ? '/api/notify'
+          : 'https://app.notify.lk/api/v1/send';
+
+        const notifyRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formBody.toString(),
+        });
+        const notifyJson = await notifyRes.json();
+        console.info('[Notify.lk Direct Dispatch]:', notifyJson);
+
+        if (notifyJson.status === 'success' || notifyJson.status === 200 || notifyJson.data) {
+          actualGateway = `Notify.lk SMS Network (${notifyConfig.senderId || 'NotifyDEMO'})`;
+          deliveryStatus = 'delivered';
+        }
+      } catch (e) {
+        console.warn('Direct Notify.lk call encountered issue, falling back to gateway queue:', e);
+      }
+    }
+
     const dispatchRecord: AdmissionSmsDispatch = {
       id: smsId,
       studentId: student.id,
@@ -524,8 +562,8 @@ export const databaseService = {
       parentContact: formattedPhone,
       schoolName: student.schoolName || 'Government School',
       message: smsBody,
-      status: 'delivered',
-      gateway: 'GovNet SMS Gateway / Dialog-Mobitel TRCSL',
+      status: deliveryStatus,
+      gateway: actualGateway,
       gatewayRef,
       dispatchedAt: nowIso,
       teacherName,
@@ -566,7 +604,7 @@ export const databaseService = {
       await setDoc(doc(studentsCol, student.id), cleanData<Partial<Student>>({
         smsDispatched: true,
         smsDispatchedAt: nowIso,
-        smsDeliveryStatus: 'delivered',
+        smsDeliveryStatus: deliveryStatus,
         smsGatewayRef: gatewayRef,
       }), { merge: true });
     } catch (e) {
@@ -580,11 +618,30 @@ export const databaseService = {
       smsId,
       phone: formattedPhone,
       message: smsBody,
-      gateway: 'GovNet SMS Gateway (Mobitel / Dialog TRCSL Relay)',
+      gateway: actualGateway,
       gatewayRef,
       dispatchedAt: nowIso,
       whatsappUrl,
     };
+  },
+
+  getNotifyLkConfig(): { userId: string; apiKey: string; senderId: string } {
+    const userId = (typeof localStorage !== 'undefined' ? localStorage.getItem('sams_notifylk_user_id') : '') ||
+      (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_NOTIFYLK_USER_ID : '') || '';
+    const apiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('sams_notifylk_api_key') : '') ||
+      (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_NOTIFYLK_API_KEY : '') || '';
+    const senderId = (typeof localStorage !== 'undefined' ? localStorage.getItem('sams_notifylk_sender_id') : '') ||
+      (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_NOTIFYLK_SENDER_ID : '') || 'NotifyDEMO';
+
+    return { userId, apiKey, senderId: senderId || 'NotifyDEMO' };
+  },
+
+  saveNotifyLkConfig(userId: string, apiKey: string, senderId = 'NotifyDEMO'): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sams_notifylk_user_id', userId.trim());
+      localStorage.setItem('sams_notifylk_api_key', apiKey.trim());
+      localStorage.setItem('sams_notifylk_sender_id', (senderId || 'NotifyDEMO').trim());
+    }
   },
 
   async deleteStudent(studentId: string): Promise<void> {

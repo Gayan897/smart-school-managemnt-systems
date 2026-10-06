@@ -263,7 +263,61 @@ exports.sendAdmissionSmsNotification = functions.firestore
 
     console.log(`[SMS-Gateway] Transmitting Admission SMS to parent (${parentContact}) for ${studentName} (Admission: ${admissionNumber})`);
 
-    // Check if Twilio API credentials are configured in environment
+    // 1. Check if Notify.lk (Sri Lanka SMS Gateway) is configured
+    const notifyUserId = process.env.NOTIFYLK_USER_ID;
+    const notifyApiKey = process.env.NOTIFYLK_API_KEY;
+    const notifySenderId = process.env.NOTIFYLK_SENDER_ID || 'NotifyDEMO';
+
+    if (notifyUserId && notifyApiKey) {
+      try {
+        let cleanDigits = parentContact.replace(/[^0-9]/g, '');
+        let targetPhone = cleanDigits;
+        if (cleanDigits.startsWith('0')) targetPhone = '94' + cleanDigits.slice(1);
+        else if (!cleanDigits.startsWith('94')) targetPhone = '94' + cleanDigits;
+
+        console.log(`[SMS-Gateway] Transmitting via Notify.lk to ${targetPhone} using Sender ID: ${notifySenderId}`);
+
+        const params = new URLSearchParams({
+          user_id: String(notifyUserId).trim(),
+          api_key: String(notifyApiKey).trim(),
+          sender_id: String(notifySenderId).trim(),
+          to: targetPhone,
+          message: message,
+        });
+
+        const notifyRes = await fetch('https://app.notify.lk/api/v1/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        });
+
+        const notifyJson = await notifyRes.json();
+        console.log('[SMS-Gateway] Notify.lk API Response:', notifyJson);
+
+        if (notifyJson.status === 'success' || notifyJson.status === 200 || notifyJson.data) {
+          await snap.ref.update({
+            status: 'delivered',
+            gateway: 'Notify.lk',
+            gatewayResponse: notifyJson,
+            dispatchedAt: new Date().toISOString(),
+          });
+          return null;
+        } else {
+          console.error('[SMS-Gateway] Notify.lk returned error:', notifyJson);
+          await snap.ref.update({
+            status: 'gateway_error',
+            gateway: 'Notify.lk',
+            error: notifyJson.message || JSON.stringify(notifyJson),
+          });
+        }
+      } catch (notifyErr) {
+        console.error('[SMS-Gateway] Notify.lk HTTP exception:', notifyErr);
+      }
+    }
+
+    // 2. Check if Twilio API credentials are configured in environment
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
     const fromPhone = process.env.TWILIO_PHONE_NUMBER;
