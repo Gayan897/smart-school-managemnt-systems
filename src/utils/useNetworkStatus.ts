@@ -1,15 +1,4 @@
-/**
- * useNetworkStatus.ts
- * ───────────────────────────────────────────────────────────────────
- * React hook that tracks online/offline connectivity status.
- *
- * - Returns real-time `isOnline` boolean.
- * - Returns `pendingCount` — the number of operations waiting to sync.
- * - Returns `isSyncing` — true while the replay is in progress.
- * - Automatically triggers `databaseService.replayOfflineQueue()` the
- *   moment the browser transitions back to online.
- * ───────────────────────────────────────────────────────────────────
- */
+
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getQueueLength } from '../data/offlineQueue';

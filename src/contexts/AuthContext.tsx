@@ -36,6 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             parsed.schoolCensusCode = 'ZONAL-MOE';
             parsed.schoolName = 'Colombo  Zonal Education Office';
           }
+          if (parsed.role === 'principal' && parsed.schoolCensusCode) {
+            try {
+              localStorage.setItem(`sams_principal_registered_${parsed.schoolCensusCode}`, 'true');
+              if (parsed.name) localStorage.setItem(`sams_principal_name_${parsed.schoolCensusCode}`, parsed.name);
+              if (parsed.id) localStorage.setItem(`sams_principal_id_${parsed.schoolCensusCode}`, parsed.id);
+            } catch { /* ignore */ }
+          }
           if (parsed.role === 'teacher' && parsed.id) {
             if (localStorage.getItem(`sams_subject_seen_${parsed.id}`) === 'true') {
               parsed.subjectSetupComplete = true;
@@ -101,6 +108,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (found.role === 'teacher' && found.id) {
       if (localStorage.getItem(`sams_subject_seen_${found.id}`) === 'true') {
         found.subjectSetupComplete = true;
+      }
+    }
+
+    // If principal successfully logged in, lock the principal role and mark school as verified/registered
+    if (found.role === 'principal' && found.schoolCensusCode) {
+      try {
+        localStorage.setItem(`sams_principal_registered_${found.schoolCensusCode}`, 'true');
+        if (found.name) localStorage.setItem(`sams_principal_name_${found.schoolCensusCode}`, found.name);
+        if (found.id) localStorage.setItem(`sams_principal_id_${found.schoolCensusCode}`, found.id);
+        databaseService.registerSchoolPrincipal(found.schoolCensusCode, found).catch(console.error);
+      } catch (err) {
+        console.warn('Could not register school principal on login:', err);
       }
     }
 

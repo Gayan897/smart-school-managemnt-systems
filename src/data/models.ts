@@ -22,6 +22,7 @@ export interface LeaveRequest {
   teacherId: string; // ID of applicant (teacher or principal)
   teacherName: string; // Name of applicant (teacher or principal)
   applicantRole?: UserRole; // 'principal' | 'teacher'
+  teacherClass?: string; // Homeroom or assigned class of the teacher (e.g. "10A")
   type: LeaveType;
   isHalfDay?: boolean;
   halfDaySession?: 'morning' | 'afternoon';
@@ -280,55 +281,6 @@ export interface TermMark {
   maxMarks: number;
 }
 
-// ─── Predictive Correlation Radar ──────────────────────────────────────────
-
-export type SubjectRiskLevel = 'safe' | 'watch' | 'at_risk' | 'critical';
-
-export interface SubjectRisk {
-  subject: string;
-  totalPeriodsScheduled: number;
-  missedPeriods: number;
-  attendanceRate: number; // 0 - 100%
-  historicalMarks: number[]; // e.g. [Term 1, Term 2]
-  latestMark: number;
-  currentGrade: string; // A, B, C, S, F
-  predictedMark: number;
-  predictedGrade: string; // A, B, C, S, F
-  predictedDrop: number; // e.g. -24
-  gradeDropLabel: string; // e.g. "B (72%) → S (48%)"
-  riskLevel: SubjectRiskLevel;
-  riskScore: number; // 0 - 100
-  regressionSlope: number; // marks lost per missed period
-  regressionR2: number; // 0.0 - 1.0 (correlation strength)
-  message: string;
-  recommendation: string;
-}
-
-export interface AbsenteeismPattern {
-  dayOfWeek: number; // 1 = Mon ... 5 = Fri
-  dayName: string;
-  period: number;
-  subject: string;
-  teacherName?: string;
-  occurrences: number;
-  severity: 'moderate' | 'high' | 'critical';
-  description: string;
-}
-
-export interface StudentCorrelationProfile {
-  student: Student;
-  classRoom: string;
-  overallAttendanceRate: number;
-  totalAbsences: number;
-  overallRiskLevel: SubjectRiskLevel;
-  overallRiskScore: number; // 0 - 100
-  subjectRisks: SubjectRisk[];
-  patterns: AbsenteeismPattern[];
-  predictedAverageMark: number;
-  latestAverageMark: number;
-  hasCriticalRisk: boolean;
-}
-
 export interface TimetableSlot {
   classRoom: string;
   dayOfWeek: number; // 1 = Mon, 5 = Fri
@@ -470,6 +422,9 @@ export interface Notice {
   category: string;
   targetRole?: NoticeTargetRole;
   targetClassRoom?: string;   // If set, notice is scoped to this class only (e.g. "11B")
+  targetUserId?: string;      // If set, notice is strictly targeted to this user ID
+  targetTeacherId?: string;   // If set, notice is strictly targeted to this teacher ID
+  targetStudentId?: string;   // If set, notice is strictly targeted to this student ID
   authorName?: string;
   authorRole?: UserRole;
   priority?: 'normal' | 'high' | 'urgent';
@@ -482,13 +437,102 @@ export function isNoticeRelevantToUser(notice: Notice, user: User | null): boole
 
   const target = notice.targetRole || 'all';
 
-  // 1. Zonal admin: exclude teacher Leave Request notices — they only need principal-related notifications
+  // 1. Zonal admin isolation:
   if (user.role === 'zonal_admin') {
-    if (notice.category === 'Leave Request') return false;
-    return true;
+    // Admin section is strictly confidential oversight. Zonal Admin only handles:
+    // - Principal Key Requests / Registration approvals (Zonal Requests)
+    // - Principal Leave Requests / Decisions
+    // - Official Zonal Directives & Ministry of Education circulars
+    //
+    // Strictly HIDE:
+    // - School class details (timetables, homeroom teacher assignments/removals, class notices)
+    // - Teachers' leaves, approvals, and balances
+    // - Internal staff duties (substitutes, proxy assignments)
+    // - Student performance, attendance alerts, and parent notifications
+    // - School-internal teacher announcements
+
+    // 1a. Block all school class details & classroom-specific notices
+    if (notice.targetClassRoom) return false;
+
+    if (
+      notice.id.startsWith('notice_timetable_') ||
+      notice.id.startsWith('notice_class_assign_') ||
+      notice.id.startsWith('notice_class_remove_') ||
+      notice.title.toLowerCase().includes('timetable') ||
+      notice.title.toLowerCase().includes('homeroom teacher') ||
+      notice.body.toLowerCase().includes('homeroom teacher')
+    ) {
+      return false;
+    }
+
+    // 1b. Block teacher duties & internal staff substitution
+    if (
+      notice.category === 'Substitute Assignment' ||
+      notice.id.startsWith('notice_proxy_') ||
+      target === 'teacher'
+    ) {
+      return false;
+    }
+
+    // 1c. Block student/parent alerts & individual student academic details
+    if (
+      target === 'parent' ||
+      target === 'student' ||
+      notice.targetStudentId ||
+      notice.id.startsWith('notice_low_marks_') ||
+      notice.id.startsWith('pnotif_') ||
+      notice.title.toLowerCase().includes('low performance alert') ||
+      notice.title.toLowerCase().includes('absent alert') ||
+      notice.title.toLowerCase().includes('late arrival') ||
+      notice.body.toLowerCase().includes('dear parent')
+    ) {
+      return false;
+    }
+
+    // 1d. Leave Requests: Strictly show ONLY Principal leave requests!
+    const isLeave =
+      notice.category === 'Leave Request' ||
+      notice.id.startsWith('notice_leave_') ||
+      notice.title.toLowerCase().includes('leave request');
+
+    if (isLeave) {
+      const isPrincipalLeave =
+        target === 'zonal_admin' ||
+        notice.title.toLowerCase().includes('principal leave') ||
+        (notice.authorRole === 'principal' && !notice.body.toLowerCase().includes('leave request for'));
+
+      // If it's a teacher's leave or mentions teacher balances, block it
+      if (!isPrincipalLeave || notice.body.toLowerCase().includes('updated remaining balances')) {
+        return false;
+      }
+      return true;
+    }
+
+    // 1e. Allow official Zonal Requests (e.g. Principal Secret Key requests)
+    if (notice.category === 'Zonal Request' || target === 'zonal_admin' || notice.id.startsWith('notice_key_req_')) {
+      return true;
+    }
+
+    // 1f. Allow official Ministry of Education / Zonal Directives
+    if (
+      notice.authorRole === 'zonal_admin' ||
+      notice.authorName === 'Ministry of Education' ||
+      notice.authorName === 'EduPub Department' ||
+      notice.authorName === 'Zonal Administration'
+    ) {
+      return true;
+    }
+
+    // 1g. High-level nationwide circulars with target 'all' that don't belong to any specific school
+    if (target === 'all' && !notice.schoolCensusCode) {
+      return true;
+    }
+
+    // Block all other school-specific operational notices
+    return false;
   }
 
-  // 2. Block zonal_admin-only notices from principals and teachers (e.g. KEY REQUEST, approval workflows)
+  // 2. Block zonal_admin-only notices from principals, teachers, parents, and students
   if (target === 'zonal_admin') return false;
 
   // 3. Strict School Census Code check:
@@ -497,23 +541,191 @@ export function isNoticeRelevantToUser(notice: Notice, user: User | null): boole
     return false;
   }
 
-  // 4. Class-scoped notice: If notice targets a specific classroom, only show to:
-  //    - The principal (always sees all)
-  //    - Teachers/students whose classRoom matches the targetClassRoom
-  if (notice.targetClassRoom) {
-    if (user.role === 'principal') return true; // principal sees everything
-    const userClass = user.classRoom || '';
-    if (userClass !== notice.targetClassRoom) return false;
+  // 4. Direct User Targeting (targetUserId / targetTeacherId / targetStudentId)
+  if (notice.targetUserId && notice.targetUserId !== user.id) {
+    // If targeted to a specific user and current user is a teacher, student, or parent, block it
+    if (user.role === 'teacher' || user.role === 'student' || user.role === 'parent') {
+      return false;
+    }
   }
 
-  // 5. Target Role check
+  if (notice.targetTeacherId && notice.targetTeacherId !== user.id) {
+    if (user.role === 'teacher') return false;
+  }
+
+  if (notice.targetStudentId && user.role === 'teacher') {
+    return false;
+  }
+
+  // 5. PRIVACY FILTER: Leave Requests & Remaining Balances
+  // As a teacher, strictly hide other teachers' leave requests and leave balances!
+  const isLeaveNotice =
+    notice.category === 'Leave Request' ||
+    notice.id.startsWith('notice_leave_') ||
+    notice.title.toLowerCase().includes('leave request');
+
+  if (isLeaveNotice) {
+    if (user.role === 'teacher') {
+      // Allow general ministry/school circulars or policy guidelines
+      const isGeneralGuideline =
+        notice.id === 'notice_sys_03' ||
+        notice.title.toLowerCase().includes('guidelines') ||
+        notice.title.toLowerCase().includes('circular') ||
+        notice.title.toLowerCase().includes('policy');
+
+      if (!isGeneralGuideline) {
+        // Individual leave request/approval/rejection/balance notice:
+        // Must belong STRICTLY to this logged-in teacher!
+        const matchesTargetUser = Boolean(notice.targetUserId && notice.targetUserId === user.id);
+        const matchesTargetTeacher = Boolean(notice.targetTeacherId && notice.targetTeacherId === user.id);
+        const matchesAuthor = Boolean(notice.authorName && user.name && notice.authorName.toLowerCase() === user.name.toLowerCase());
+
+        const cleanUserName = user.name?.trim().toLowerCase() || '';
+        const matchesNameInNotice =
+          cleanUserName.length > 2 &&
+          (notice.title.toLowerCase().includes(cleanUserName) || notice.body.toLowerCase().includes(cleanUserName));
+
+        // If it does NOT match this teacher, strictly block!
+        if (!matchesTargetUser && !matchesTargetTeacher && !matchesAuthor && !matchesNameInNotice) {
+          return false;
+        }
+      }
+    }
+  }
+
+  // 6. PRIVACY FILTER: Student Details & Parent/Student Alerts
+  // Teachers must NOT see parent-targeted alerts, student low performance marks, weak subjects, or student private alerts in notifications
+  if (user.role === 'teacher') {
+    // Block parent and student targeted notices from teachers' notifications section
+    if (target === 'parent' || target === 'student') {
+      return false;
+    }
+
+    // Block notices containing individual student academic alerts or student personal details
+    const hasStudentDetails =
+      notice.id.startsWith('notice_low_marks_') ||
+      notice.id.startsWith('pnotif_') ||
+      notice.title.toLowerCase().includes('low performance alert') ||
+      notice.title.toLowerCase().includes('absent alert') ||
+      notice.title.toLowerCase().includes('late arrival') ||
+      notice.body.toLowerCase().includes('dear parent') ||
+      notice.body.toLowerCase().includes('weak subjects:') ||
+      notice.body.toLowerCase().includes('below the expected threshold') ||
+      notice.body.toLowerCase().includes('adm#:');
+
+    if (hasStudentDetails) {
+      return false;
+    }
+  }
+
+  // 7. Proxy Duty / Substitute Assignment Isolation
+  // Only the assigned substitute teacher (and the principal) should receive proxy assignment notices
+  const isProxyNotice =
+    notice.category === 'Substitute Assignment' ||
+    notice.id.startsWith('notice_proxy_');
+
+  if (isProxyNotice) {
+    if (user.role === 'teacher') {
+      if (notice.targetUserId && notice.targetUserId !== user.id) return false;
+      if (notice.targetTeacherId && notice.targetTeacherId !== user.id) return false;
+      if (!notice.targetUserId && !notice.targetTeacherId) {
+        const cleanUserName = user.name?.trim().toLowerCase() || '';
+        if (cleanUserName.length > 2 && !notice.body.toLowerCase().includes(cleanUserName)) {
+          return false;
+        }
+      }
+    }
+  }
+
+  // 8. Class-scoped notice: If notice targets a specific classroom, only show to:
+  //    - The principal (supervises all)
+  //    - Teachers/students whose classRoom matches the targetClassRoom
+  if (notice.targetClassRoom) {
+    if (user.role !== 'principal') {
+      const userClass = user.classRoom || '';
+      if (userClass !== notice.targetClassRoom) return false;
+    }
+  }
+
+  // 9. Target Role check
   if (target === 'all') return true;
-  if (user.role === 'principal' && target === 'principal') return true;
+  if (user.role === 'principal' && (target === 'principal' || target === 'teacher' || isLeaveNotice || isProxyNotice)) return true;
   if (user.role === 'teacher' && target === 'teacher') return true;
   if (user.role === 'student' && target === 'student') return true;
   if (user.role === 'parent' && target === 'parent') return true;
 
   return false;
+}
+
+/**
+ * Deduplicates an array of notices, retaining only the latest unique notice
+ * based on unique ID or identical semantic content (same title, body, target, and classroom).
+ */
+export function deduplicateNotices(notices: Notice[]): Notice[] {
+  if (!Array.isArray(notices) || notices.length === 0) return [];
+
+  const seenIds = new Set<string>();
+  const seenSemanticKeys = new Set<string>();
+  const result: Notice[] = [];
+
+  for (const n of notices) {
+    if (!n || !n.id) continue;
+
+    // 1. Direct ID check
+    if (seenIds.has(n.id)) continue;
+    seenIds.add(n.id);
+
+    // 2. Semantic content key check
+    const titleKey = (n.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const bodyKey = (n.body || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 120);
+    const classKey = (n.targetClassRoom || '').trim().toLowerCase();
+    const roleKey = (n.targetRole || 'all').trim().toLowerCase();
+    const categoryKey = (n.category || '').trim().toLowerCase();
+    const censusKey = (n.schoolCensusCode || '').trim().toLowerCase();
+
+    const semanticKey = `${titleKey}__${categoryKey}__${classKey}__${roleKey}__${censusKey}__${bodyKey}`;
+    if (seenSemanticKeys.has(semanticKey)) {
+      continue;
+    }
+    seenSemanticKeys.add(semanticKey);
+
+    result.push(n);
+  }
+
+  return result;
+}
+
+/**
+ * Deduplicates parent notifications, keeping only the newest unique notification per student and event.
+ */
+export function deduplicateParentNotifications(notifs: ParentNotification[]): ParentNotification[] {
+  if (!Array.isArray(notifs) || notifs.length === 0) return [];
+
+  const seenIds = new Set<string>();
+  const seenSemanticKeys = new Set<string>();
+  const result: ParentNotification[] = [];
+
+  for (const pn of notifs) {
+    if (!pn || !pn.id) continue;
+
+    if (seenIds.has(pn.id)) continue;
+    seenIds.add(pn.id);
+
+    const titleKey = (pn.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const dateKey = (pn.date || '').trim();
+    const studentKey = (pn.studentId || '').trim();
+    const messageKey = (pn.message || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 100);
+
+    const semanticKey = `${studentKey}__${dateKey}__${titleKey}__${messageKey}`;
+    if (seenSemanticKeys.has(semanticKey)) {
+      continue;
+    }
+    seenSemanticKeys.add(semanticKey);
+
+    result.push(pn);
+  }
+
+  return result;
 }
 
 export function isUserSubjectSpecialist(user?: User | null): boolean {
@@ -564,7 +776,12 @@ export interface UniversityPathway {
   zScoreMin: number;
   zScoreMax: number;
   faculty: string;
-  district?: string; // district quota note
+  district?: string; // district quota note or campus location
+  durationYears?: number; // 3, 4, 5
+  degreeType?: 'Honours' | 'Special' | 'General' | 'Professional';
+  intakeQuota?: string;
+  careerProspects?: string[];
+  minPrerequisites?: string;
 }
 
 // ─── Sri Lanka School Structure ──────────────────────────────────────────────
@@ -587,7 +804,7 @@ export const AL_STREAMS: ALStreamInfo[] = [
     nameTa: 'உயிரியல் அறிவியல்',
     color: '#059669',
     subjects: ['Biology', 'Chemistry', 'Physics / Agriculture'],
-    description: 'For students aiming for Medicine, Nursing, Veterinary, or Agriculture degrees.',
+    description: 'For students aiming for Medicine, Dental, Veterinary, Pharmacy, Nursing, or Agriculture degrees.',
   },
   {
     id: 'mathsScience',
@@ -596,7 +813,7 @@ export const AL_STREAMS: ALStreamInfo[] = [
     nameTa: 'இயற்பியல் அறிவியல் (கணிதம்)',
     color: '#0284c7',
     subjects: ['Combined Mathematics', 'Physics', 'Chemistry / ICT'],
-    description: 'For Engineering, Computer Science, and Physical Science degrees.',
+    description: 'For Engineering, Artificial Intelligence, Computer Science, and Physical Science degrees.',
   },
   {
     id: 'commerce',
@@ -605,7 +822,7 @@ export const AL_STREAMS: ALStreamInfo[] = [
     nameTa: 'வணிகவியல்',
     color: '#d97706',
     subjects: ['Economics', 'Business Studies', 'Accounting'],
-    description: 'For Management, Finance, Economics, and Business degrees.',
+    description: 'For Management, Accountancy, Finance, Business Information Systems, and Marketing degrees.',
   },
   {
     id: 'technology',
@@ -613,8 +830,8 @@ export const AL_STREAMS: ALStreamInfo[] = [
     nameSi: 'තාක්ෂණය',
     nameTa: 'தொழில்நுட்பம்',
     color: '#0891b2',
-    subjects: ['Engineering Technology', 'Science for Technology', 'ICT / Drawing'],
-    description: 'For Technology, ICT, and Engineering Technology degrees.',
+    subjects: ['Engineering Technology (ET)', 'Science for Technology (SFT)', 'ICT / Agro Technology / Drawing'],
+    description: 'For Engineering Technology (BET), Biosystems Technology (BBST), and ICT (BICT) degrees.',
   },
   {
     id: 'arts',
@@ -622,49 +839,960 @@ export const AL_STREAMS: ALStreamInfo[] = [
     nameSi: 'කලා',
     nameTa: 'கலை',
     color: '#db2777',
-    subjects: ['History / Logic', 'Geography / Civic Ed.', 'Sinhala / Tamil Literature / Economics'],
-    description: 'For Humanities, Law, Social Sciences, and Languages degrees.',
+    subjects: ['History / Logic', 'Geography / Civic Ed.', 'Sinhala / Tamil / English Literature / Economics'],
+    description: 'For Law (LLB), Humanities, Social Sciences, Mass Communication, and Languages degrees.',
   },
 ];
 
-// ─── Real Sri Lanka University Pathways (UGC 2022/2023) ──────────────────────
+// ─── Real Sri Lanka University Pathways (Latest UGC 2024/2025 Admissions) ────
 
 export const SL_UNIVERSITY_PATHWAYS: UniversityPathway[] = [
-  // Bio Science
-  { degree: 'MBBS Medicine', university: 'University of Colombo', stream: 'bioScience', zScoreMin: 1.8, zScoreMax: 3.0, faculty: 'Faculty of Medicine' },
-  { degree: 'MBBS Medicine', university: 'University of Peradeniya', stream: 'bioScience', zScoreMin: 1.7, zScoreMax: 2.8, faculty: 'Faculty of Medicine' },
-  { degree: 'MBBS Medicine', university: 'University of Ruhuna', stream: 'bioScience', zScoreMin: 1.5, zScoreMax: 2.5, faculty: 'Faculty of Medicine' },
-  { degree: 'MBBS Medicine', university: 'Rajarata University', stream: 'bioScience', zScoreMin: 1.4, zScoreMax: 2.3, faculty: 'Faculty of Medicine & Allied Sciences' },
-  { degree: 'MBBS Medicine', university: 'University of Jaffna', stream: 'bioScience', zScoreMin: 1.6, zScoreMax: 2.6, faculty: 'Faculty of Medicine' },
-  { degree: 'BSc Nursing', university: 'University of Colombo', stream: 'bioScience', zScoreMin: 0.8, zScoreMax: 1.6, faculty: 'Faculty of Medicine' },
-  { degree: 'BSc Agriculture', university: 'University of Peradeniya', stream: 'bioScience', zScoreMin: 0.3, zScoreMax: 1.0, faculty: 'Faculty of Agriculture' },
-  { degree: 'BSc Food Science & Technology', university: 'Wayamba University', stream: 'bioScience', zScoreMin: 0.2, zScoreMax: 0.8, faculty: 'Faculty of Livestock, Fisheries & Nutrition' },
-  { degree: 'BSc Animal Science', university: 'Uva Wellassa University', stream: 'bioScience', zScoreMin: 0.2, zScoreMax: 0.7, faculty: 'Faculty of Animal Science & Export Agriculture' },
-  // Physical Science (Maths)
-  { degree: 'BSc Engineering', university: 'University of Moratuwa', stream: 'mathsScience', zScoreMin: 1.6, zScoreMax: 2.5, faculty: 'Faculty of Engineering' },
-  { degree: 'BSc Engineering', university: 'University of Peradeniya', stream: 'mathsScience', zScoreMin: 1.4, zScoreMax: 2.2, faculty: 'Faculty of Engineering' },
-  { degree: 'BSc Engineering', university: 'University of Ruhuna', stream: 'mathsScience', zScoreMin: 1.2, zScoreMax: 2.0, faculty: 'Faculty of Engineering' },
-  { degree: 'BSc Computer Science', university: 'University of Colombo', stream: 'mathsScience', zScoreMin: 1.0, zScoreMax: 1.8, faculty: 'Faculty of Science' },
-  { degree: 'BSc Information Technology', university: 'University of Kelaniya', stream: 'mathsScience', zScoreMin: 0.8, zScoreMax: 1.6, faculty: 'Faculty of Computing & Technology' },
-  { degree: 'BSc Physical Science', university: 'University of Sri Jayewardenepura', stream: 'mathsScience', zScoreMin: 0.6, zScoreMax: 1.4, faculty: 'Faculty of Applied Sciences' },
-  { degree: 'BSc Statistics', university: 'University of Colombo', stream: 'mathsScience', zScoreMin: 0.5, zScoreMax: 1.2, faculty: 'Faculty of Science' },
-  // Commerce
-  { degree: 'BBA Business Administration', university: 'University of Sri Jayewardenepura', stream: 'commerce', zScoreMin: 0.5, zScoreMax: 1.4, faculty: 'Faculty of Management Studies' },
-  { degree: 'BCom Accountancy & Finance', university: 'University of Kelaniya', stream: 'commerce', zScoreMin: 0.4, zScoreMax: 1.2, faculty: 'Faculty of Commerce & Management' },
-  { degree: 'BSc Economics', university: 'University of Colombo', stream: 'commerce', zScoreMin: 0.6, zScoreMax: 1.5, faculty: 'Faculty of Arts' },
-  { degree: 'BBA Marketing', university: 'University of Kelaniya', stream: 'commerce', zScoreMin: 0.3, zScoreMax: 1.0, faculty: 'Faculty of Commerce & Management' },
-  { degree: 'BSc Business Management', university: 'Sabaragamuwa University', stream: 'commerce', zScoreMin: 0.2, zScoreMax: 0.9, faculty: 'Faculty of Management Studies' },
-  // Technology
-  { degree: 'BSc Technology (Engineering)', university: 'UNIVOTEC', stream: 'technology', zScoreMin: 0.3, zScoreMax: 1.2, faculty: 'Faculty of Technology' },
-  { degree: 'BSc Engineering Technology', university: 'Uva Wellassa University', stream: 'technology', zScoreMin: 0.2, zScoreMax: 1.0, faculty: 'Faculty of Science & Technology' },
-  { degree: 'BSc ICT', university: 'University of Moratuwa', stream: 'technology', zScoreMin: 0.8, zScoreMax: 1.5, faculty: 'Faculty of Information Technology' },
-  { degree: 'BSc Quantity Surveying', university: 'University of Moratuwa', stream: 'technology', zScoreMin: 0.6, zScoreMax: 1.3, faculty: 'Faculty of Architecture' },
-  // Arts
-  { degree: 'BA Law (LLB)', university: 'University of Colombo', stream: 'arts', zScoreMin: 0.8, zScoreMax: 1.8, faculty: 'Faculty of Law' },
-  { degree: 'BA Social Sciences', university: 'University of Kelaniya', stream: 'arts', zScoreMin: 0.1, zScoreMax: 0.8, faculty: 'Faculty of Social Sciences' },
-  { degree: 'BA Mass Communication', university: 'University of Kelaniya', stream: 'arts', zScoreMin: 0.2, zScoreMax: 1.0, faculty: 'Faculty of Humanities' },
-  { degree: 'BA Political Science', university: 'University of Peradeniya', stream: 'arts', zScoreMin: 0.1, zScoreMax: 0.7, faculty: 'Faculty of Arts' },
-  { degree: 'BA Eastern Languages', university: 'University of Jaffna', stream: 'arts', zScoreMin: 0.1, zScoreMax: 0.6, faculty: 'Faculty of Arts' },
+  // ── Bio Science Stream ──
+  {
+    degree: 'MBBS Medicine',
+    university: 'University of Colombo',
+    stream: 'bioScience',
+    zScoreMin: 1.88,
+    zScoreMax: 2.85,
+    faculty: 'Faculty of Medicine (Kynsey Road)',
+    district: 'Colombo Merit & District',
+    durationYears: 5,
+    degreeType: 'Professional',
+    intakeQuota: 'Merit (40%) + District Quota (55%) + Underprivileged (5%)',
+    careerProspects: ['Medical Doctor', 'Surgeon', 'Clinical Consultant', 'Medical Researcher'],
+    minPrerequisites: '3 S passes in Chemistry, Biology & Physics in single attempt',
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'University of Peradeniya',
+    stream: 'bioScience',
+    zScoreMin: 1.76,
+    zScoreMax: 2.75,
+    faculty: 'Faculty of Medicine',
+    district: 'Kandy & Central Province',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Officer', 'Specialist Physician', 'Clinical Academic'],
+    minPrerequisites: '3 S passes in Chemistry, Biology & Physics',
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'bioScience',
+    zScoreMin: 1.74,
+    zScoreMax: 2.65,
+    faculty: 'Faculty of Medical Sciences',
+    district: 'Colombo & Gampaha',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Doctor', 'Healthcare Administrator', 'Research Scientist'],
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'University of Kelaniya',
+    stream: 'bioScience',
+    zScoreMin: 1.71,
+    zScoreMax: 2.58,
+    faculty: 'Faculty of Medicine (Ragama)',
+    district: 'Gampaha & Western Province',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Officer', 'Clinical Pharmacologist', 'Public Health Director'],
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'University of Moratuwa',
+    stream: 'bioScience',
+    zScoreMin: 1.68,
+    zScoreMax: 2.52,
+    faculty: 'Faculty of Medicine (Nagoda/Kalutara)',
+    district: 'Kalutara & Western Province',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Doctor', 'Biomedical Engineer', 'Health Informatics Specialist'],
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'University of Ruhuna',
+    stream: 'bioScience',
+    zScoreMin: 1.58,
+    zScoreMax: 2.45,
+    faculty: 'Faculty of Medicine (Karapitiya)',
+    district: 'Southern Province',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Officer', 'Clinical Specialist', 'Academic'],
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'University of Jaffna',
+    stream: 'bioScience',
+    zScoreMin: 1.52,
+    zScoreMax: 2.38,
+    faculty: 'Faculty of Medicine',
+    district: 'Northern Province & Quotas',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Doctor', 'Community Health Specialist'],
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'Rajarata University of Sri Lanka',
+    stream: 'bioScience',
+    zScoreMin: 1.45,
+    zScoreMax: 2.28,
+    faculty: 'Faculty of Medicine & Allied Sciences (Saliyapura)',
+    district: 'North Central Province',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Doctor', 'Tropical Health Specialist'],
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'Wayamba University of Sri Lanka',
+    stream: 'bioScience',
+    zScoreMin: 1.48,
+    zScoreMax: 2.32,
+    faculty: 'Faculty of Medicine (Kuliyapitiya)',
+    district: 'North Western Province',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Officer', 'Clinical Researcher'],
+  },
+  {
+    degree: 'MBBS Medicine',
+    university: 'Sabaragamuwa University of Sri Lanka',
+    stream: 'bioScience',
+    zScoreMin: 1.46,
+    zScoreMax: 2.30,
+    faculty: 'Faculty of Medicine (Ratnapura)',
+    district: 'Sabaragamuwa Province',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Medical Doctor', 'Emergency Physician'],
+  },
+  {
+    degree: 'BDS Dental Surgery',
+    university: 'University of Peradeniya',
+    stream: 'bioScience',
+    zScoreMin: 1.54,
+    zScoreMax: 2.25,
+    faculty: 'Faculty of Dental Sciences',
+    district: 'All-Island / Central',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Dental Surgeon', 'Orthodontist', 'Oral & Maxillofacial Surgeon'],
+    minPrerequisites: '3 S in Chemistry, Biology & Physics',
+  },
+  {
+    degree: 'BVSc Veterinary Science',
+    university: 'University of Peradeniya',
+    stream: 'bioScience',
+    zScoreMin: 1.38,
+    zScoreMax: 2.05,
+    faculty: 'Faculty of Veterinary Medicine & Animal Science',
+    district: 'All-Island / Central',
+    durationYears: 5,
+    degreeType: 'Professional',
+    careerProspects: ['Veterinary Surgeon', 'Livestock Development Officer', 'Wildlife Veterinarian'],
+  },
+  {
+    degree: 'BPharm (Hons) Pharmacy',
+    university: 'University of Colombo',
+    stream: 'bioScience',
+    zScoreMin: 1.28,
+    zScoreMax: 1.95,
+    faculty: 'Faculty of Medicine',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Hospital Pharmacist', 'Pharmaceutical R&D Specialist', 'Regulatory Affairs Manager'],
+  },
+  {
+    degree: 'BSc (Hons) Nursing',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'bioScience',
+    zScoreMin: 0.92,
+    zScoreMax: 1.65,
+    faculty: 'Faculty of Allied Health Sciences',
+    district: 'Western Province & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Senior Nursing Officer', 'Critical Care Nurse', 'Clinical Nurse Educator'],
+  },
+  {
+    degree: 'BSc (Hons) Medical Laboratory Science (MLS)',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'bioScience',
+    zScoreMin: 1.12,
+    zScoreMax: 1.75,
+    faculty: 'Faculty of Allied Health Sciences',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Clinical Laboratory Scientist', 'Biomedical Diagnostic Specialist', 'Pathology Lab Manager'],
+  },
+  {
+    degree: 'BSc (Hons) Physiotherapy',
+    university: 'University of Colombo',
+    stream: 'bioScience',
+    zScoreMin: 1.18,
+    zScoreMax: 1.80,
+    faculty: 'Faculty of Medicine',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Sports Physiotherapist', 'Neuro-Rehabilitation Specialist', 'Cardiopulmonary Therapist'],
+  },
+  {
+    degree: 'BSc (Hons) Molecular Biology & Biotechnology',
+    university: 'University of Colombo',
+    stream: 'bioScience',
+    zScoreMin: 1.15,
+    zScoreMax: 1.85,
+    faculty: 'Faculty of Science',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Biotechnology Scientist', 'Genomics Researcher', 'Bioinformatics Specialist'],
+  },
+  {
+    degree: 'BSc (Hons) Food Science & Nutrition',
+    university: 'Wayamba University of Sri Lanka',
+    stream: 'bioScience',
+    zScoreMin: 0.48,
+    zScoreMax: 1.25,
+    faculty: 'Faculty of Livestock, Fisheries & Nutrition',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Food Technologist', 'Dietetic Consultant', 'Quality Assurance Auditor'],
+  },
+  {
+    degree: 'BSc (Hons) Agriculture',
+    university: 'University of Peradeniya',
+    stream: 'bioScience',
+    zScoreMin: 0.42,
+    zScoreMax: 1.18,
+    faculty: 'Faculty of Agriculture',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Agricultural Officer', 'Agronomist', 'Agribusiness Consultant', 'Crop Geneticist'],
+  },
+  {
+    degree: 'BSc (Hons) Fisheries & Marine Sciences',
+    university: 'University of Ruhuna',
+    stream: 'bioScience',
+    zScoreMin: 0.28,
+    zScoreMax: 0.95,
+    faculty: 'Faculty of Fisheries & Marine Sciences & Technology',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Marine Biologist', 'Aquaculture Specialist', 'Oceanographic Researcher'],
+  },
+  {
+    degree: 'BSc (Hons) Animal Science & Export Agriculture',
+    university: 'Uva Wellassa University',
+    stream: 'bioScience',
+    zScoreMin: 0.22,
+    zScoreMax: 0.88,
+    faculty: 'Faculty of Animal Science & Export Agriculture',
+    district: 'All-Island / Badulla',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Export Commodity Manager', 'Livestock Specialist', 'Agro-Enterprise Developer'],
+  },
+
+  // ── Physical Science (Maths) Stream ──
+  {
+    degree: 'BSc (Hons) Engineering',
+    university: 'University of Moratuwa',
+    stream: 'mathsScience',
+    zScoreMin: 1.75,
+    zScoreMax: 2.70,
+    faculty: 'Faculty of Engineering (Katubedda)',
+    district: 'Western Province & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    intakeQuota: 'Merit (40%) + District Quota (55%)',
+    careerProspects: ['Software Architect', 'Civil Engineer', 'Electrical & Electronic Engineer', 'Mechanical Engineer'],
+    minPrerequisites: '3 S in Combined Maths, Physics & Chemistry/ICT',
+  },
+  {
+    degree: 'BSc (Hons) Engineering',
+    university: 'University of Peradeniya',
+    stream: 'mathsScience',
+    zScoreMin: 1.58,
+    zScoreMax: 2.40,
+    faculty: 'Faculty of Engineering',
+    district: 'Central Province & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Civil Engineer', 'Mechanical Engineer', 'Chemical Engineer', 'Computer Engineer'],
+    minPrerequisites: '3 S in Combined Maths, Physics & Chemistry/ICT',
+  },
+  {
+    degree: 'BSc (Hons) Engineering',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'mathsScience',
+    zScoreMin: 1.50,
+    zScoreMax: 2.30,
+    faculty: 'Faculty of Engineering (Mattegoda)',
+    district: 'Western Province',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Mechanical Engineer', 'Civil Engineer', 'Computer Systems Engineer'],
+  },
+  {
+    degree: 'BSc (Hons) Engineering',
+    university: 'University of Ruhuna',
+    stream: 'mathsScience',
+    zScoreMin: 1.40,
+    zScoreMax: 2.18,
+    faculty: 'Faculty of Engineering (Hapugala, Galle)',
+    district: 'Southern Province',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Civil Engineer', 'Electrical Engineer', 'Marine & Mechanical Engineer'],
+  },
+  {
+    degree: 'BSc (Hons) Engineering',
+    university: 'University of Jaffna',
+    stream: 'mathsScience',
+    zScoreMin: 1.28,
+    zScoreMax: 2.05,
+    faculty: 'Faculty of Engineering (Kilinochchi)',
+    district: 'Northern Province & Quotas',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Civil Engineer', 'Electrical & Electronic Engineer', 'Computer Engineer'],
+  },
+  {
+    degree: 'BSc (Hons) Engineering',
+    university: 'South Eastern University of Sri Lanka',
+    stream: 'mathsScience',
+    zScoreMin: 1.18,
+    zScoreMax: 1.95,
+    faculty: 'Faculty of Engineering (Oluvil)',
+    district: 'Eastern Province & Quotas',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Civil & Environmental Engineer', 'Mechanical Engineer', 'Electrical Engineer'],
+  },
+  {
+    degree: 'BSc (Hons) Artificial Intelligence',
+    university: 'University of Moratuwa',
+    stream: 'mathsScience',
+    zScoreMin: 1.62,
+    zScoreMax: 2.45,
+    faculty: 'Faculty of Information Technology',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['AI Engineer', 'Machine Learning Scientist', 'NLP & Computer Vision Specialist', 'Robotics Architect'],
+    minPrerequisites: '3 S in Combined Maths, Physics & Chemistry/ICT',
+  },
+  {
+    degree: 'BSc (Hons) Computer Science',
+    university: 'University of Colombo',
+    stream: 'mathsScience',
+    zScoreMin: 1.48,
+    zScoreMax: 2.25,
+    faculty: 'School of Computing (UCSC)',
+    district: 'All-Island Merit',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Lead Software Engineer', 'Systems Architect', 'Security Engineer', 'Cloud Architect'],
+  },
+  {
+    degree: 'BSc (Hons) Software Engineering',
+    university: 'University of Kelaniya',
+    stream: 'mathsScience',
+    zScoreMin: 1.44,
+    zScoreMax: 2.20,
+    faculty: 'Faculty of Computing & Technology',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Full-Stack Engineer', 'DevOps Specialist', 'Software Product Lead'],
+  },
+  {
+    degree: 'BSc (Hons) Data Science',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'mathsScience',
+    zScoreMin: 1.38,
+    zScoreMax: 2.15,
+    faculty: 'Faculty of Computing',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Data Scientist', 'Big Data Architect', 'Quantitative Researcher', 'Business Intelligence Lead'],
+  },
+  {
+    degree: 'BSc (Hons) Information Systems',
+    university: 'University of Colombo',
+    stream: 'mathsScience',
+    zScoreMin: 0.92,
+    zScoreMax: 1.68,
+    faculty: 'School of Computing (UCSC)',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['IT Business Analyst', 'Enterprise Solution Architect', 'Project Manager'],
+  },
+  {
+    degree: 'BSc (Hons) Computer Science & Technology',
+    university: 'Uva Wellassa University',
+    stream: 'mathsScience',
+    zScoreMin: 0.88,
+    zScoreMax: 1.62,
+    faculty: 'Faculty of Applied Sciences',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Software Developer', 'Mobile Application Engineer', 'System Administrator'],
+  },
+  {
+    degree: 'BSc (Hons) Statistics & Operations Research',
+    university: 'University of Peradeniya',
+    stream: 'mathsScience',
+    zScoreMin: 0.85,
+    zScoreMax: 1.72,
+    faculty: 'Faculty of Science',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Data Analyst', 'Operations Researcher', 'Risk Modeler', 'Supply Chain Analyst'],
+  },
+  {
+    degree: 'BSc (Hons) Financial Mathematics & Industrial Statistics',
+    university: 'University of Colombo',
+    stream: 'mathsScience',
+    zScoreMin: 1.08,
+    zScoreMax: 1.88,
+    faculty: 'Faculty of Science',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Actuary', 'Financial Quantitative Analyst', 'Risk Consultant', 'Investment Modeler'],
+  },
+  {
+    degree: 'BSc Physical Science',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'mathsScience',
+    zScoreMin: 0.65,
+    zScoreMax: 1.48,
+    faculty: 'Faculty of Applied Sciences',
+    district: 'Western Province & All-Island',
+    durationYears: 3,
+    degreeType: 'General',
+    careerProspects: ['Scientific Officer', 'Educator', 'Laboratory Analyst', 'Data Specialist'],
+  },
+  {
+    degree: 'BSc Physical Science',
+    university: 'University of Kelaniya',
+    stream: 'mathsScience',
+    zScoreMin: 0.60,
+    zScoreMax: 1.42,
+    faculty: 'Faculty of Science',
+    district: 'Western Province',
+    durationYears: 3,
+    degreeType: 'General',
+    careerProspects: ['Quality Control Specialist', 'Data Analyst', 'Secondary Science Educator'],
+  },
+
+  // ── Commerce Stream ──
+  {
+    degree: 'BSc (Hons) Business Administration',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'commerce',
+    zScoreMin: 1.54,
+    zScoreMax: 2.15,
+    faculty: 'Faculty of Management Studies & Commerce',
+    district: 'Colombo & All-Island Merit',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Corporate Executive', 'Strategy Consultant', 'Managing Director', 'Entrepreneur'],
+    minPrerequisites: '3 S in Economics, Business Studies & Accounting',
+  },
+  {
+    degree: 'BBA (Hons) Business Administration',
+    university: 'University of Colombo',
+    stream: 'commerce',
+    zScoreMin: 1.50,
+    zScoreMax: 2.10,
+    faculty: 'Faculty of Management & Finance',
+    district: 'Colombo & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Management Consultant', 'Commercial Banking Executive', 'Corporate Planner'],
+  },
+  {
+    degree: 'BCom (Hons) Accountancy & Finance',
+    university: 'University of Kelaniya',
+    stream: 'commerce',
+    zScoreMin: 1.42,
+    zScoreMax: 1.95,
+    faculty: 'Faculty of Commerce & Management Studies',
+    district: 'Gampaha & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Chartered Accountant', 'Financial Controller', 'Auditor', 'Tax Consultant'],
+  },
+  {
+    degree: 'BSc (Hons) Accounting',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'commerce',
+    zScoreMin: 1.52,
+    zScoreMax: 2.12,
+    faculty: 'Faculty of Management Studies & Commerce',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Chief Financial Officer (CFO)', 'Senior Audit Partner', 'Forensic Accountant'],
+  },
+  {
+    degree: 'BSc (Hons) Finance',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'commerce',
+    zScoreMin: 1.48,
+    zScoreMax: 2.05,
+    faculty: 'Faculty of Management Studies & Commerce',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Investment Banker', 'Portfolio Manager', 'Equity Research Analyst', 'Treasury Officer'],
+  },
+  {
+    degree: 'BSc (Hons) Business Information Systems (BIS)',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'commerce',
+    zScoreMin: 1.25,
+    zScoreMax: 1.80,
+    faculty: 'Faculty of Management Studies & Commerce',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['ERP Consultant', 'Fintech Specialist', 'Business Systems Analyst'],
+  },
+  {
+    degree: 'BBA (Hons) Marketing',
+    university: 'University of Kelaniya',
+    stream: 'commerce',
+    zScoreMin: 1.18,
+    zScoreMax: 1.72,
+    faculty: 'Faculty of Commerce & Management Studies',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Brand Manager', 'Chief Marketing Officer', 'Digital Marketing Director'],
+  },
+  {
+    degree: 'BBA (Hons) Human Resource Management',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'commerce',
+    zScoreMin: 1.20,
+    zScoreMax: 1.75,
+    faculty: 'Faculty of Management Studies & Commerce',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Chief People Officer (CPO)', 'Talent Acquisition Director', 'HR Business Partner'],
+  },
+  {
+    degree: 'BSc (Hons) Banking & Insurance',
+    university: 'Wayamba University of Sri Lanka',
+    stream: 'commerce',
+    zScoreMin: 0.88,
+    zScoreMax: 1.48,
+    faculty: 'Faculty of Business Studies & Finance',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Commercial Banking Manager', 'Underwriting Manager', 'Risk & Compliance Officer'],
+  },
+  {
+    degree: 'BSc (Hons) Tourism & Hospitality Management',
+    university: 'Sabaragamuwa University of Sri Lanka',
+    stream: 'commerce',
+    zScoreMin: 0.58,
+    zScoreMax: 1.30,
+    faculty: 'Faculty of Management Studies',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Hospitality Director', 'Tourism Development Officer', 'Resort Operations Manager'],
+  },
+  {
+    degree: 'BSc (Hons) International Business',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'commerce',
+    zScoreMin: 1.32,
+    zScoreMax: 1.88,
+    faculty: 'Faculty of Management Studies & Commerce',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Global Supply Chain Manager', 'Export-Import Director', 'Trade Advisor'],
+  },
+
+  // ── Technology Stream ──
+  {
+    degree: 'BET (Hons) Engineering Technology',
+    university: 'University of Moratuwa',
+    stream: 'technology',
+    zScoreMin: 1.05,
+    zScoreMax: 1.85,
+    faculty: 'Faculty of Technology',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Production Engineer', 'Automation Specialist', 'Plant Operations Technologist'],
+    minPrerequisites: '3 S in Engineering Tech, Science for Tech & ICT/Drawing',
+  },
+  {
+    degree: 'BET (Hons) Engineering Technology',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'technology',
+    zScoreMin: 0.98,
+    zScoreMax: 1.78,
+    faculty: 'Faculty of Technology (Pitipana/Homagama)',
+    district: 'Colombo & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Mechatronics Technologist', 'Robotics Specialist', 'Industrial Systems Engineer'],
+  },
+  {
+    degree: 'BET (Hons) Engineering Technology',
+    university: 'University of Kelaniya',
+    stream: 'technology',
+    zScoreMin: 0.88,
+    zScoreMax: 1.68,
+    faculty: 'Faculty of Computing & Technology',
+    district: 'Gampaha & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Electronic Systems Engineer', 'Automotive Technologist', 'Smart Grid Specialist'],
+  },
+  {
+    degree: 'BET (Hons) Engineering Technology',
+    university: 'University of Ruhuna',
+    stream: 'technology',
+    zScoreMin: 0.78,
+    zScoreMax: 1.55,
+    faculty: 'Faculty of Technology (Karagoda Uyangoda)',
+    district: 'Southern Province',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Mechanical Technologist', 'Renewable Energy Specialist', 'Marine Systems Technologist'],
+  },
+  {
+    degree: 'BET (Hons) Engineering Technology',
+    university: 'Rajarata University of Sri Lanka',
+    stream: 'technology',
+    zScoreMin: 0.58,
+    zScoreMax: 1.35,
+    faculty: 'Faculty of Technology',
+    district: 'North Central Province',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Civil Technologist', 'Construction Works Engineer', 'Water Resource Technologist'],
+  },
+  {
+    degree: 'BET (Hons) Engineering Technology',
+    university: 'Uva Wellassa University',
+    stream: 'technology',
+    zScoreMin: 0.52,
+    zScoreMax: 1.28,
+    faculty: 'Faculty of Technological Studies',
+    district: 'Badulla & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Instrumentation Technologist', 'Industrial Automation Specialist'],
+  },
+  {
+    degree: 'BET (Hons) Engineering Technology',
+    university: 'UNIVOTEC (Univ of Vocational Technology)',
+    stream: 'technology',
+    zScoreMin: 0.38,
+    zScoreMax: 1.18,
+    faculty: 'Faculty of Industrial Technology',
+    district: 'All-Island / NVQ',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Industrial Plant Manager', 'Technical Operations Director'],
+  },
+  {
+    degree: 'BBST (Hons) Biosystems Technology',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'technology',
+    zScoreMin: 0.82,
+    zScoreMax: 1.58,
+    faculty: 'Faculty of Technology',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Bioprocess Technologist', 'Bio-fertilizer Specialist', 'Food Processing Technologist'],
+    minPrerequisites: '3 S in Biosystems Tech, Science for Tech & Agro Tech/ICT',
+  },
+  {
+    degree: 'BBST (Hons) Biosystems Technology',
+    university: 'University of Colombo',
+    stream: 'technology',
+    zScoreMin: 0.74,
+    zScoreMax: 1.48,
+    faculty: 'Institute of Agro-Technology & Rural Sciences',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Agri-Tech Solutions Architect', 'Post-Harvest Technologist'],
+  },
+  {
+    degree: 'BBST (Hons) Biosystems Technology',
+    university: 'University of Ruhuna',
+    stream: 'technology',
+    zScoreMin: 0.62,
+    zScoreMax: 1.38,
+    faculty: 'Faculty of Technology',
+    district: 'Southern Province',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Fisheries Technologist', 'Environmental Quality Officer'],
+  },
+  {
+    degree: 'BBST (Hons) Biosystems Technology',
+    university: 'Wayamba University of Sri Lanka',
+    stream: 'technology',
+    zScoreMin: 0.52,
+    zScoreMax: 1.28,
+    faculty: 'Faculty of Technology',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Commercial Plantation Technologist', 'Horticulture Specialist'],
+  },
+  {
+    degree: 'BICT (Hons) Information & Communication Technology',
+    university: 'University of Sri Jayewardenepura',
+    stream: 'technology',
+    zScoreMin: 1.12,
+    zScoreMax: 1.85,
+    faculty: 'Faculty of Technology',
+    district: 'All-Island Merit',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Network Security Engineer', 'Mobile App Developer', 'Cloud Infrastructure Technologist'],
+    minPrerequisites: '3 S in Engineering/Biosystems Tech, Science for Tech & ICT',
+  },
+  {
+    degree: 'BICT (Hons) Information & Communication Technology',
+    university: 'University of Kelaniya',
+    stream: 'technology',
+    zScoreMin: 1.02,
+    zScoreMax: 1.75,
+    faculty: 'Faculty of Computing & Technology',
+    district: 'Gampaha & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Cyber Security Analyst', 'Database Administrator', 'Full-Stack Developer'],
+  },
+  {
+    degree: 'BICT (Hons) Information & Communication Technology',
+    university: 'Rajarata University of Sri Lanka',
+    stream: 'technology',
+    zScoreMin: 0.68,
+    zScoreMax: 1.45,
+    faculty: 'Faculty of Technology',
+    district: 'North Central & Quotas',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Software Developer', 'Systems Engineer', 'IT Project Officer'],
+  },
+  {
+    degree: 'BSc (Hons) Quantity Surveying',
+    university: 'University of Moratuwa',
+    stream: 'technology',
+    zScoreMin: 1.25,
+    zScoreMax: 2.05,
+    faculty: 'Faculty of Architecture',
+    district: 'All-Island (Tech & Maths Streams)',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Chartered Quantity Surveyor', 'Cost Consultant', 'Contract Administrator', 'Project Manager'],
+  },
+  {
+    degree: 'BSc (Hons) Facilities Management',
+    university: 'University of Moratuwa',
+    stream: 'technology',
+    zScoreMin: 0.88,
+    zScoreMax: 1.65,
+    faculty: 'Faculty of Architecture',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Facilities Operations Director', 'Commercial Real Estate Asset Manager'],
+  },
+  {
+    degree: 'BSc (Hons) Town & Country Planning',
+    university: 'University of Moratuwa',
+    stream: 'technology',
+    zScoreMin: 0.78,
+    zScoreMax: 1.55,
+    faculty: 'Faculty of Architecture',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Urban Planning Officer', 'City Architect', 'Environmental Impact Assessor'],
+  },
+
+  // ── Arts Stream ──
+  {
+    degree: 'LLB Bachelor of Laws',
+    university: 'University of Colombo',
+    stream: 'arts',
+    zScoreMin: 1.70,
+    zScoreMax: 2.45,
+    faculty: 'Faculty of Law (Reid Avenue)',
+    district: 'Colombo & All-Island Merit',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Attorney-at-Law', 'State Counsel', 'Corporate Legal Counsel', 'Judicial Officer'],
+    minPrerequisites: 'Passing mark in Law Entrance Aptitude Test & General English',
+  },
+  {
+    degree: 'LLB Bachelor of Laws',
+    university: 'University of Peradeniya',
+    stream: 'arts',
+    zScoreMin: 1.55,
+    zScoreMax: 2.25,
+    faculty: 'Department of Law',
+    district: 'Central Province & All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Legal Practitioner', 'Human Rights Advocate', 'Legal Academic'],
+  },
+  {
+    degree: 'LLB Bachelor of Laws',
+    university: 'University of Jaffna',
+    stream: 'arts',
+    zScoreMin: 1.40,
+    zScoreMax: 2.10,
+    faculty: 'Faculty of Law',
+    district: 'Northern Province & Quotas',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Attorney-at-Law', 'Civil Rights Lawyer', 'Magistrate'],
+  },
+  {
+    degree: 'BA (Hons) English & Linguistics',
+    university: 'University of Kelaniya',
+    stream: 'arts',
+    zScoreMin: 0.95,
+    zScoreMax: 1.80,
+    faculty: 'Faculty of Humanities',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['University English Lecturer', 'Diplomatic Service Officer', 'Publishing Editor'],
+  },
+  {
+    degree: 'BA (Hons) Economics & Demography',
+    university: 'University of Colombo',
+    stream: 'arts',
+    zScoreMin: 0.88,
+    zScoreMax: 1.70,
+    faculty: 'Faculty of Arts',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Economic Policy Analyst', 'Central Bank Executive', 'Socio-Demographic Researcher'],
+  },
+  {
+    degree: 'BA (Hons) International Relations',
+    university: 'University of Colombo',
+    stream: 'arts',
+    zScoreMin: 0.90,
+    zScoreMax: 1.75,
+    faculty: 'Faculty of Arts',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Foreign Service Attaché', 'UN/NGO Program Specialist', 'Geopolitical Analyst'],
+  },
+  {
+    degree: 'BA (Hons) Mass Communication',
+    university: 'University of Kelaniya',
+    stream: 'arts',
+    zScoreMin: 0.68,
+    zScoreMax: 1.45,
+    faculty: 'Faculty of Social Sciences',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Broadcast Journalist', 'Media Production Executive', 'Public Relations Director'],
+  },
+  {
+    degree: 'BA (Hons) Psychology',
+    university: 'University of Peradeniya',
+    stream: 'arts',
+    zScoreMin: 0.85,
+    zScoreMax: 1.60,
+    faculty: 'Faculty of Arts',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Counseling Psychologist', 'Organizational Behaviorist', 'Mental Health Program Officer'],
+  },
+  {
+    degree: 'BA (Hons) Political Science & Public Policy',
+    university: 'University of Peradeniya',
+    stream: 'arts',
+    zScoreMin: 0.52,
+    zScoreMax: 1.30,
+    faculty: 'Faculty of Arts',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Public Administrator (SLAS)', 'Policy Research Officer', 'Parliamentary Affairs Executive'],
+  },
+  {
+    degree: 'BA (Hons) Archaeology & Heritage Management',
+    university: 'Rajarata University of Sri Lanka',
+    stream: 'arts',
+    zScoreMin: 0.38,
+    zScoreMax: 1.15,
+    faculty: 'Faculty of Social Sciences & Humanities',
+    district: 'All-Island',
+    durationYears: 4,
+    degreeType: 'Honours',
+    careerProspects: ['Archaeological Officer', 'Cultural Heritage Director', 'Museum Curator'],
+  },
+  {
+    degree: 'BA (General) Social Sciences',
+    university: 'University of Kelaniya',
+    stream: 'arts',
+    zScoreMin: 0.25,
+    zScoreMax: 1.00,
+    faculty: 'Faculty of Social Sciences',
+    district: 'All-Island',
+    durationYears: 3,
+    degreeType: 'General',
+    careerProspects: ['Administrative Officer', 'Community Development Facilitator', 'Teacher'],
+  },
+  {
+    degree: 'BA Eastern Languages & Translation Studies',
+    university: 'University of Jaffna',
+    stream: 'arts',
+    zScoreMin: 0.15,
+    zScoreMax: 0.85,
+    faculty: 'Faculty of Arts',
+    district: 'All-Island',
+    durationYears: 3,
+    degreeType: 'General',
+    careerProspects: ['Official State Translator', 'Linguistic Researcher', 'Bilingual Communications Officer'],
+  },
 ];
 
 // ─── Default Classes ─────────────────────────────────────────────────────────

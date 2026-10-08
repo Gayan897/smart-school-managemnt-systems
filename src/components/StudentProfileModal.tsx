@@ -7,8 +7,7 @@ import {
 import { databaseService } from '../data/database';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
-import { computeStudentCorrelationProfile, generatePredictiveParentAlert } from '../data/correlationEngine';
-import type { Student, AttendanceRecord, TermMark, SchoolClass, ParentNotification, TimetableSlot } from '../data/models';
+import { deduplicateParentNotifications, type Student, type AttendanceRecord, type TermMark, type SchoolClass, type ParentNotification, type TimetableSlot } from '../data/models';
 
 interface StudentProfileModalProps {
   studentId: string;
@@ -40,7 +39,7 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
         setAttendance(data.attendance);
         setMarks(data.marks);
         setClassObj(data.classObj);
-        setParentNotifications(data.parentNotifications);
+        setParentNotifications(deduplicateParentNotifications(data.parentNotifications));
         setTimetable(tt);
       })
       .catch((err) => {
@@ -105,6 +104,8 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
   const highestMarkObj = marks.length > 0
     ? marks.reduce((prev, curr) => (curr.marks > prev.marks ? curr : prev), marks[0])
     : null;
+
+  const uniqueParentNotifs = deduplicateParentNotifications(parentNotifications);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -235,7 +236,7 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
             { id: 'overview' as const, label: 'Overview', icon: User },
             { id: 'attendance' as const, label: `Attendance (${attendanceRate}%)`, icon: Calendar },
             { id: 'marks' as const, label: `Academic Marks (${avgMarks}%)`, icon: Award },
-            { id: 'notifications' as const, label: `Parent Alerts (${parentNotifications.length})`, icon: Bell },
+            { id: 'notifications' as const, label: `Parent Alerts (${uniqueParentNotifs.length})`, icon: Bell },
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -560,11 +561,11 @@ export default function StudentProfileModal({ studentId, onClose }: StudentProfi
                 <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Bell size={18} style={{ color: 'var(--primary)' }} /> Parent Attendance Notification Stream
                 </h4>
-                {parentNotifications.length === 0 ? (
+                {uniqueParentNotifs.length === 0 ? (
                   <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>No parent notifications dispatched yet.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {parentNotifications.map((notif) => (
+                    {uniqueParentNotifs.map((notif) => (
                       <div
                         key={notif.id}
                         style={{

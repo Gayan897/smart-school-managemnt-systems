@@ -157,13 +157,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/correlation-radar"
-        element={
-          !user ? <Navigate to="/login" replace /> :
-          <Navigate to="/dashboard" replace />
-        }
-      />
-      <Route
         path="/edupub"
         element={
           !user ? <Navigate to="/login" replace /> :

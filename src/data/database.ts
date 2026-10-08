@@ -26,7 +26,7 @@ import {
   getQueueLength,
   type QueuedOperation,
 } from './offlineQueue';
-import { defaultClasses, COLOMBO_GOVT_SCHOOLS } from './models';
+import { defaultClasses, COLOMBO_GOVT_SCHOOLS, deduplicateNotices, deduplicateParentNotifications } from './models';
 import type {
   User,
   Student,
@@ -578,7 +578,7 @@ export const databaseService = {
 
     // 2. Also record in `parent_notifications` collection for real-time mobile push & app alerts
     try {
-      const notifId = `pnotif_adm_${student.id.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+      const notifId = `pnotif_adm_${student.id.replace(/[^a-zA-Z0-9]/g, '_')}`;
       const parentNotif: ParentNotification = {
         id: notifId,
         studentId: student.id,
@@ -795,13 +795,15 @@ export const databaseService = {
         id: `notice_leave_${request.id}`,
         title: isPrincipal
           ? `🏛️ Principal Leave Request: ${request.teacherName} (${request.schoolName || 'School'})`
-          : `Leave Request: ${request.teacherName}`,
+          : `Leave Request: ${request.teacherName}${request.teacherClass ? ` (${request.teacherClass.toLowerCase().startsWith('class') ? request.teacherClass : `Class ${request.teacherClass}`})` : ''}`,
         body: isPrincipal
           ? `Principal ${request.teacherName} of ${request.schoolName || 'School'} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}\n\nPlease review and approve in the Zonal Admin Command Center.`
-          : `${request.teacherName} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}`,
+          : `${request.teacherName}${request.teacherClass ? ` (${request.teacherClass.toLowerCase().startsWith('class') ? request.teacherClass : `Class ${request.teacherClass}`})` : ''} has submitted a ${request.type.toUpperCase()} leave request from ${request.startDate} to ${request.endDate}.\nReason: ${request.reason}`,
         date: new Date().toISOString(),
         category: 'Leave Request',
         targetRole: isPrincipal ? 'zonal_admin' : 'principal',
+        targetUserId: request.teacherId,
+        targetTeacherId: request.teacherId,
         authorName: request.teacherName,
         authorRole: isPrincipal ? 'principal' : 'teacher',
         priority: 'urgent',
@@ -931,12 +933,18 @@ export const databaseService = {
     const comment = isPrincipal ? (request.adminComment || request.principalComment) : request.principalComment;
 
     const notice: Notice = {
-      id: `notice_leave_decision_${request.id}_${Date.now()}`,
-      title: `Leave Request ${request.status.toUpperCase()}: ${request.type.toString().replace('_', ' ').toUpperCase()} Leave`,
-      body: `Leave request for ${request.teacherName} (${request.startDate} to ${request.endDate}${request.isHalfDay ? ' [Half Day]' : ''}) has been ${request.status.toUpperCase()} by ${approverTitle}.${comment ? `\nRemark: ${comment}` : ''}${remInfo}`,
+      id: `notice_leave_decision_${request.id}`,
+      title: isPrincipal
+        ? `🏛️ Principal Leave Decision: ${request.teacherName} — ${request.status.toUpperCase()}`
+        : `Leave Request ${request.status.toUpperCase()}: ${request.type.toString().replace('_', ' ').toUpperCase()} Leave`,
+      body: isPrincipal
+        ? `Principal ${request.teacherName}'s leave request (${request.startDate} to ${request.endDate}${request.isHalfDay ? ' [Half Day]' : ''}) has been ${request.status.toUpperCase()} by Zonal Education Office.${comment ? `\nRemark: ${comment}` : ''}`
+        : `Leave request for ${request.teacherName} (${request.startDate} to ${request.endDate}${request.isHalfDay ? ' [Half Day]' : ''}) has been ${request.status.toUpperCase()} by ${approverTitle}.${comment ? `\nRemark: ${comment}` : ''}${remInfo}`,
       date: new Date().toISOString(),
       category: 'Leave Request',
       targetRole: isPrincipal ? 'principal' : 'teacher',
+      targetUserId: request.teacherId,
+      targetTeacherId: request.teacherId,
       authorName: approverTitle,
       authorRole: isPrincipal ? 'zonal_admin' : 'principal',
       priority: request.status === 'approved' ? 'high' : 'urgent',
@@ -1009,7 +1017,7 @@ export const databaseService = {
           excused: `${studentName} attendance was marked EXCUSED on ${record.date}.`,
         };
 
-        const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}_${Date.now()}`;
+        const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}`;
         const notifDocRef = doc(parentNotificationsCol, notifId);
 
         const parentNotif: ParentNotification = {
@@ -1073,7 +1081,7 @@ export const databaseService = {
     const snapshot = await getDocs(q);
     const list = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
     list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-    return list;
+    return deduplicateParentNotifications(list);
   },
 
   async getTermMarks(): Promise<TermMark[]> {
@@ -1241,7 +1249,7 @@ export const databaseService = {
     const nowIso = new Date().toISOString();
 
     // 1. Broadcast system notice — scoped to this class only
-    const noticeId = `notice_timetable_${classRoom}_${academicYear}_${Date.now()}`;
+    const noticeId = `notice_timetable_${classRoom}_${academicYear}`;
     const notice: Notice = {
       id: noticeId,
       title: `📅 Academic Timetable Published: ${className} (${academicYear})`,
@@ -1263,6 +1271,23 @@ export const databaseService = {
     };
     await setDoc(doc(noticesCol, notice.id), cleanData(notice));
 
+    // Clean up any legacy or duplicate timetable notices for this class & year
+    try {
+      const q = query(noticesCol, where('targetClassRoom', '==', classRoom));
+      const snap = await getDocs(q);
+      const batchClean = writeBatch(db);
+      let hasDeletes = false;
+      snap.docs.forEach((d) => {
+        if (d.id !== noticeId && d.id.startsWith(`notice_timetable_${classRoom}_`)) {
+          batchClean.delete(d.ref);
+          hasDeletes = true;
+        }
+      });
+      if (hasDeletes) await batchClean.commit();
+    } catch (e) {
+      console.warn('Could not clean legacy timetable notices:', e);
+    }
+
     // 2. Add in-app notifications for students of that classroom
     try {
       const q = query(studentsCol, where('classRoom', '==', classRoom));
@@ -1271,7 +1296,7 @@ export const databaseService = {
         const batch = writeBatch(db);
         snap.docs.forEach((d) => {
           const stu = d.data();
-          const pNotifId = `pnotif_tt_${stu.id}_${Date.now()}`;
+          const pNotifId = `pnotif_tt_${stu.id}_${academicYear}`;
           const parentNotif: ParentNotification = {
             id: pNotifId,
             studentId: stu.id,
@@ -1310,11 +1335,12 @@ export const databaseService = {
       } catch (e) {
         console.warn('Failed to seed default notices:', e);
       }
-      return defaultNotices;
+      return deduplicateNotices(defaultNotices);
     }
 
     const notices: Notice[] = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
-    return notices.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    const sorted = notices.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    return deduplicateNotices(sorted);
   },
 
   async createNotice(notice: Notice): Promise<void> {
@@ -1357,12 +1383,14 @@ export const databaseService = {
       }), { merge: true });
 
       const notice: Notice = {
-        id: `notice_class_assign_${classId}_${Date.now()}`,
+        id: `notice_class_assign_${classId}`,
         title: `Homeroom Teacher Assigned: Class ${classId}`,
         body: `${teacherName || 'Teacher'} has been assigned as homeroom teacher for Class ${classId}.`,
         date: new Date().toISOString(),
         category: 'Administrative',
         targetRole: 'teacher',
+        targetUserId: teacherId,
+        targetTeacherId: teacherId,
         authorName: 'Principal Office',
         authorRole: 'principal',
         priority: 'normal',
@@ -1379,7 +1407,7 @@ export const databaseService = {
     }), { merge: true });
 
     const notice: Notice = {
-      id: `notice_class_remove_${classId}_${Date.now()}`,
+      id: `notice_class_remove_${classId}`,
       title: `Homeroom Teacher Unassigned: Class ${classId}`,
       body: `Homeroom teacher assignment for Class ${classId} has been removed by the Principal Office.`,
       date: new Date().toISOString(),
@@ -1414,12 +1442,12 @@ export const databaseService = {
           } catch (e) {
             console.warn('Failed to seed default notices on snapshot:', e);
           }
-          callback(defaultNotices);
+          callback(deduplicateNotices(defaultNotices));
           return;
         }
         const notices: Notice[] = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
         notices.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-        callback(notices);
+        callback(deduplicateNotices(notices));
       },
       (err) => {
         console.error('[EduNexus] subscribeToNotices error:', err);
@@ -1469,7 +1497,7 @@ export const databaseService = {
       q,
       (snap) => {
         const list = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
-        callback(list);
+        callback(deduplicateParentNotifications(list));
       },
       (err) => {
         console.error('[EduNexus] subscribeToParentNotifications error:', err);
@@ -1494,12 +1522,14 @@ export const databaseService = {
 
     // Push notice to substitute teacher
     const notice: Notice = {
-      id: `notice_proxy_${assignment.id}_${Date.now()}`,
+      id: `notice_proxy_${assignment.id}`,
       title: `⚡ Proxy Duty Assigned: Period ${assignment.period} (${assignment.classRoom})`,
       body: `You have been assigned as Smart Substitute for ${assignment.originalTeacherName} in Class ${assignment.classRoom} (Period ${assignment.period}, Subject: ${assignment.originalSubject}) on ${assignment.date}.${assignment.lessonPlanNotes ? `\n\n📝 Lesson Plan / Notes: ${assignment.lessonPlanNotes}` : ''}`,
       date: new Date().toISOString(),
       category: 'Substitute Assignment',
       targetRole: 'teacher',
+      targetUserId: assignment.substituteTeacherId,
+      targetTeacherId: assignment.substituteTeacherId,
       authorName: assignment.assignedBy || 'Principal Office',
       authorRole: 'principal',
       priority: 'urgent',
@@ -1516,7 +1546,7 @@ export const databaseService = {
       batch.set(docRef, cleanData(assignment));
 
       // Create Notice
-      const noticeId = `notice_proxy_${assignment.id}_${Date.now()}`;
+      const noticeId = `notice_proxy_${assignment.id}`;
       const noticeDocRef = doc(noticesCol, noticeId);
       const notice: Notice = {
         id: noticeId,
@@ -1525,6 +1555,8 @@ export const databaseService = {
         date: nowIso,
         category: 'Substitute Assignment',
         targetRole: 'teacher',
+        targetUserId: assignment.substituteTeacherId,
+        targetTeacherId: assignment.substituteTeacherId,
         authorName: assignment.assignedBy || 'Principal Office',
         authorRole: 'principal',
         priority: 'urgent',
@@ -1582,6 +1614,9 @@ export const databaseService = {
   async getZonalSchools(): Promise<GovernmentSchool[]> {
     try {
       const snapshot = await getDocs(schoolsCol);
+      const map: Record<string, GovernmentSchool> = {};
+      COLOMBO_GOVT_SCHOOLS.forEach(s => { map[s.censusCode] = { ...s }; });
+
       if (snapshot.empty) {
         // Seed default Colombo district schools
         const batch = writeBatch(db);
@@ -1589,17 +1624,58 @@ export const databaseService = {
           batch.set(doc(schoolsCol, sch.censusCode), sch);
         }
         await batch.commit();
-        return COLOMBO_GOVT_SCHOOLS;
+      } else {
+        snapshot.docs.forEach(d => {
+          map[d.id] = { ...map[d.id], ...d.data() };
+        });
       }
-      const map: Record<string, GovernmentSchool> = {};
-      COLOMBO_GOVT_SCHOOLS.forEach(s => { map[s.censusCode] = { ...s }; });
-      snapshot.docs.forEach(d => {
-        map[d.id] = { ...map[d.id], ...d.data() };
-      });
+
+      // Check users collection for registered/logged principals to accurately lock school principal positions
+      try {
+        const principalQuery = query(usersCol, where('role', '==', 'principal'));
+        const principalSnap = await getDocs(principalQuery);
+        principalSnap.docs.forEach(pDoc => {
+          const pUser = pDoc.data();
+          if (pUser.schoolCensusCode && map[pUser.schoolCensusCode]) {
+            map[pUser.schoolCensusCode].isRegistered = true;
+            map[pUser.schoolCensusCode].principalId = pUser.id;
+            map[pUser.schoolCensusCode].principalName = pUser.name;
+          }
+        });
+      } catch {
+        // Ignore firestore query errors in offline/restricted scenarios
+      }
+
+      // Check localStorage for locally active or logged in principals
+      try {
+        if (typeof localStorage !== 'undefined') {
+          Object.keys(map).forEach(code => {
+            if (localStorage.getItem(`sams_principal_registered_${code}`) === 'true') {
+              map[code].isRegistered = true;
+              if (!map[code].principalId) map[code].principalId = localStorage.getItem(`sams_principal_id_${code}`) || 'active-principal';
+              const localName = localStorage.getItem(`sams_principal_name_${code}`);
+              if (localName && !map[code].principalName) map[code].principalName = localName;
+            }
+          });
+        }
+      } catch { /* ignore */ }
+
       return Object.values(map);
     } catch (err) {
       console.warn('Using default COLOMBO_GOVT_SCHOOLS fallback:', err);
-      return COLOMBO_GOVT_SCHOOLS;
+      const fallbackList = COLOMBO_GOVT_SCHOOLS.map(s => {
+        const isLocallyReg = typeof localStorage !== 'undefined' && localStorage.getItem(`sams_principal_registered_${s.censusCode}`) === 'true';
+        if (isLocallyReg) {
+          return {
+            ...s,
+            isRegistered: true,
+            principalId: localStorage.getItem(`sams_principal_id_${s.censusCode}`) || 'active-principal',
+            principalName: localStorage.getItem(`sams_principal_name_${s.censusCode}`) || 'Verified Principal',
+          };
+        }
+        return s;
+      });
+      return fallbackList;
     }
   },
 
@@ -1710,6 +1786,13 @@ export const databaseService = {
       principalName: principalUser.name,
       isRegistered: true,
     }), { merge: true });
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`sams_principal_registered_${censusCode}`, 'true');
+        localStorage.setItem(`sams_principal_name_${censusCode}`, principalUser.name);
+        localStorage.setItem(`sams_principal_id_${censusCode}`, principalUser.id);
+      }
+    } catch { /* ignore */ }
   },
 
   async requestZonalMasterKey(req: Omit<ZonalKeyRequest, 'id' | 'requestedAt' | 'status'>): Promise<ZonalKeyRequest> {
@@ -1955,7 +2038,7 @@ export const databaseService = {
             late: `⚠️ ATTENDANCE ALERT: ${studentName} arrived LATE to school on ${record.date}. Recorded by ${payload.teacherName || 'Class Teacher'}.`,
             excused: `${studentName} attendance was marked EXCUSED on ${record.date}.`,
           };
-          const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}_replay_${Date.now()}`;
+          const notifId = `pnotif_${record.studentId}_${record.date.replace(/-/g, '')}`;
           const notifDocRef = doc(parentNotificationsCol, notifId);
           const parentNotif: ParentNotification = {
             id: notifId,
@@ -2003,6 +2086,8 @@ export const databaseService = {
           date: new Date().toISOString(),
           category: 'Leave Request',
           targetRole: isPrincipal ? 'zonal_admin' : 'principal',
+          targetUserId: payload.request.teacherId,
+          targetTeacherId: payload.request.teacherId,
           authorName: payload.request.teacherName,
           authorRole: isPrincipal ? 'principal' : 'teacher',
           priority: 'urgent',

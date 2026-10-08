@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Check, X, Sparkles, BookOpen, Clock, Calendar, CheckCircle, Building2, ShieldCheck, AlertCircle } from 'lucide-react';
+import {
+  Plus, Check, X, Sparkles, BookOpen, Clock, Calendar,
+  CheckCircle, Building2, ShieldCheck, AlertCircle, Lock, Filter, Search
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { calculateLeaveDays, type LeaveRequest, type LeaveType, type LeaveStatus } from '../data/models';
+import { calculateLeaveDays, type LeaveRequest, type LeaveType, type LeaveStatus, type Teacher } from '../data/models';
 import OfflineBanner from '../components/OfflineBanner';
 import { useNetworkStatus } from '../utils/useNetworkStatus';
 
@@ -12,6 +15,9 @@ export default function LeaveScreen() {
   const { user, language } = useAuth();
   const navigate = useNavigate();
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [selectedClassFilter, setSelectedClassFilter] = useState<string>('all');
+  const [staffSearchQuery, setStaffSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'my' | 'all'>('my');
@@ -41,16 +47,80 @@ export default function LeaveScreen() {
   const userSchoolCode = isZonalAdmin ? undefined : user?.schoolCensusCode;
 
   async function load() {
-    const reqs = await databaseService.getLeaveRequests(userSchoolCode);
+    const [reqs, teacherList] = await Promise.all([
+      databaseService.getLeaveRequests(userSchoolCode),
+      databaseService.getTeachers(userSchoolCode),
+    ]);
     setLeaveRequests(reqs);
+    setTeachers(teacherList);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, [user]);
 
+  // Helper to resolve teacher profile and class for any leave request
+  const getTeacherInfo = (req: LeaveRequest) => {
+    const teacherObj = teachers.find(
+      t => t.id === req.teacherId ||
+           (t.name && req.teacherName && t.name.trim().toLowerCase() === req.teacherName.trim().toLowerCase())
+    );
+    const rawClass = req.teacherClass || (teacherObj?.classRoom && teacherObj.classRoom !== 'Not assigned' ? teacherObj.classRoom : undefined);
+    const formattedClass = rawClass
+      ? (rawClass.toLowerCase().startsWith('class') ? rawClass : `Class ${rawClass}`)
+      : null;
+    return { teacherObj, rawClass, formattedClass };
+  };
+
+  const currentSchoolCode = user?.schoolCensusCode;
+  const myRequests = leaveRequests.filter(r => r.teacherId === user?.id);
+
+  // Accurate Leave balance calculation
+  const calculateUsedDays = (typeKey: string) => {
+    return myRequests
+      .filter(r => r.status === 'approved' && r.type.toString().replace(/^half_/, '') === typeKey)
+      .reduce((sum, r) => sum + calculateLeaveDays(r.startDate, r.endDate, r.type, r.isHalfDay), 0);
+  };
+
+  const casualUsed = calculateUsedDays('casual');
+  const medicalUsed = calculateUsedDays('medical');
+  const annualUsed = calculateUsedDays('annual');
+
+  const CASUAL_MAX = 7, MEDICAL_MAX = 14, ANNUAL_MAX = 21;
+  const casualRemaining = user?.casualBalance !== undefined ? user.casualBalance : Math.max(0, CASUAL_MAX - casualUsed);
+  const medicalRemaining = user?.medicalBalance !== undefined ? user.medicalBalance : Math.max(0, MEDICAL_MAX - medicalUsed);
+  const annualRemaining = user?.annualBalance !== undefined ? user.annualBalance : Math.max(0, ANNUAL_MAX - annualUsed);
+
+  // Selected leave type remaining balance for modal
+  const selectedTypeBase = form.type.toString().replace(/^half_/, '');
+  const isOfficialDuty = selectedTypeBase === 'duty';
+  const selectedTypeRemaining =
+    selectedTypeBase === 'casual' ? casualRemaining :
+    selectedTypeBase === 'medical' ? medicalRemaining :
+    selectedTypeBase === 'annual' ? annualRemaining : 999;
+
+  const requestedDays = form.startDate
+    ? calculateLeaveDays(
+        form.startDate,
+        form.isHalfDay ? form.startDate : (form.endDate || form.startDate),
+        form.type,
+        form.isHalfDay
+      )
+    : 0;
+
+  const isBalanceExhausted = !isOfficialDuty && selectedTypeRemaining <= 0;
+  const isRequestedExceeded = !isOfficialDuty && requestedDays > 0 && requestedDays > selectedTypeRemaining;
+  const isLeaveLocked = isBalanceExhausted || isRequestedExceeded;
+  const isAllLeaveLocked = casualRemaining <= 0 && medicalRemaining <= 0 && annualRemaining <= 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.startDate || (!form.isHalfDay && !form.endDate) || !form.reason.trim()) return;
+
+    if (isLeaveLocked) {
+      alert('Leave quota is exhausted or requested duration exceeds remaining balance. Leave request is locked.');
+      return;
+    }
+
     setSubmitting(true);
 
     const endDateToSave = form.isHalfDay ? form.startDate : form.endDate;
@@ -60,6 +130,7 @@ export default function LeaveScreen() {
       teacherId: user?.id ?? '',
       teacherName: user?.name ?? '',
       applicantRole: user?.role || 'teacher',
+      teacherClass: user?.classRoom && user.classRoom !== 'Not assigned' ? user.classRoom : undefined,
       type: form.type,
       isHalfDay: form.isHalfDay,
       halfDaySession: form.isHalfDay ? form.halfDaySession : undefined,
@@ -97,13 +168,42 @@ export default function LeaveScreen() {
     await load();
   }
 
-  const currentSchoolCode = user?.schoolCensusCode;
-  const myRequests = leaveRequests.filter(r => r.teacherId === user?.id);
+  // Unique classes present across teacher profiles & leave requests
+  const uniqueStaffClasses = useMemo(() => {
+    const set = new Set<string>();
+    teachers.forEach(t => {
+      if (t.classRoom && t.classRoom !== 'Not assigned') {
+        set.add(t.classRoom.replace(/^class\s*/i, '').trim());
+      }
+    });
+    leaveRequests.forEach(r => {
+      if (r.teacherClass && r.teacherClass !== 'Not assigned') {
+        set.add(r.teacherClass.replace(/^class\s*/i, '').trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [teachers, leaveRequests]);
 
   let displayedRequests: LeaveRequest[] = myRequests;
   if (isPrincipal) {
+    const schoolStaffReqs = leaveRequests.filter(r => r.schoolCensusCode === currentSchoolCode && r.teacherId !== user?.id);
     displayedRequests = activeTab === 'all'
-      ? leaveRequests.filter(r => r.schoolCensusCode === currentSchoolCode && r.teacherId !== user?.id)
+      ? schoolStaffReqs.filter(r => {
+          const { rawClass, teacherObj } = getTeacherInfo(r);
+          if (selectedClassFilter !== 'all') {
+            const classNorm = rawClass ? rawClass.replace(/^class\s*/i, '').trim().toLowerCase() : '';
+            if (classNorm !== selectedClassFilter.toLowerCase()) return false;
+          }
+          if (staffSearchQuery.trim()) {
+            const q = staffSearchQuery.toLowerCase();
+            const nameMatch = r.teacherName.toLowerCase().includes(q);
+            const classMatch = rawClass ? rawClass.toLowerCase().includes(q) : false;
+            const subMatch = teacherObj?.subject ? teacherObj.subject.toLowerCase().includes(q) : false;
+            const reasonMatch = r.reason.toLowerCase().includes(q);
+            if (!nameMatch && !classMatch && !subMatch && !reasonMatch) return false;
+          }
+          return true;
+        })
       : myRequests;
   } else if (isZonalAdmin) {
     // Admin views all Principal leave requests across schools
@@ -115,28 +215,6 @@ export default function LeaveScreen() {
     approved: 'badge-success',
     rejected: 'badge-danger',
   };
-
-  // Accurate Leave balance calculation
-  const calculateUsedDays = (typeKey: string) => {
-    return myRequests
-      .filter(r => r.status === 'approved' && r.type.toString().replace(/^half_/, '') === typeKey)
-      .reduce((sum, r) => sum + calculateLeaveDays(r.startDate, r.endDate, r.type, r.isHalfDay), 0);
-  };
-
-  const casualUsed = calculateUsedDays('casual');
-  const medicalUsed = calculateUsedDays('medical');
-  const annualUsed = calculateUsedDays('annual');
-
-  const CASUAL_MAX = 7, MEDICAL_MAX = 14, ANNUAL_MAX = 21;
-  const casualRemaining = user?.casualBalance !== undefined ? user.casualBalance : Math.max(0, CASUAL_MAX - casualUsed);
-  const medicalRemaining = user?.medicalBalance !== undefined ? user.medicalBalance : Math.max(0, MEDICAL_MAX - medicalUsed);
-  const annualRemaining = user?.annualBalance !== undefined ? user.annualBalance : Math.max(0, ANNUAL_MAX - annualUsed);
-
-  // Selected leave type remaining balance for modal
-  const selectedTypeBase = form.type.toString().replace(/^half_/, '');
-  const selectedTypeRemaining =
-    selectedTypeBase === 'casual' ? casualRemaining :
-    selectedTypeBase === 'medical' ? medicalRemaining : annualRemaining;
 
   if (loading) {
     return (
@@ -163,10 +241,17 @@ export default function LeaveScreen() {
         </div>
 
         {!isZonalAdmin && (
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={16} />
-            {isPrincipal ? 'Apply for Principal Leave' : t('applyLeave', language)}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {isAllLeaveLocked && (
+              <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}>
+                <Lock size={13} /> Leave Quota Over (Locked)
+              </span>
+            )}
+            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              <Plus size={16} />
+              {isPrincipal ? 'Apply for Principal Leave' : t('applyLeave', language)}
+            </button>
+          </div>
         )}
       </div>
 
@@ -190,7 +275,25 @@ export default function LeaveScreen() {
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '15px' }}>
-              <CheckCircle size={18} /> ✅ Leave Approved for {lastApprovedLeave.teacherName}!
+              <CheckCircle size={18} /> ✅ Leave Approved for {lastApprovedLeave.teacherName}
+              {(() => {
+                const { formattedClass } = getTeacherInfo(lastApprovedLeave);
+                return formattedClass ? (
+                  <span style={{
+                    fontSize: '12px',
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: 700,
+                    marginLeft: '4px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px'
+                  }}>
+                    🏛️ {formattedClass}
+                  </span>
+                ) : null;
+              })()}!
             </div>
             <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.95 }}>
               Updated Remaining Balances &rarr; Casual: <strong>{lastApprovedLeave.remainingCasualAfterApproval ?? casualRemaining}</strong> days | Medical: <strong>{lastApprovedLeave.remainingMedicalAfterApproval ?? medicalRemaining}</strong> days | Annual: <strong>{lastApprovedLeave.remainingAnnualAfterApproval ?? annualRemaining}</strong> days
@@ -220,17 +323,32 @@ export default function LeaveScreen() {
               { label: t('casualLeave', language), remaining: casualRemaining, used: casualUsed, max: CASUAL_MAX, color: '#0284c7' },
               { label: t('medicalLeave', language), remaining: medicalRemaining, used: medicalUsed, max: MEDICAL_MAX, color: '#0d9488' },
               { label: t('annualLeave', language), remaining: annualRemaining, used: annualUsed, max: ANNUAL_MAX, color: '#10b981' },
-            ].map(b => (
-              <div key={b.label} className="leave-balance-card">
-                <div className="leave-balance-value" style={{ color: b.color }}>
-                  {b.remaining}
+            ].map(b => {
+              const isOver = b.remaining <= 0;
+              return (
+                <div
+                  key={b.label}
+                  className="leave-balance-card"
+                  style={isOver ? { border: '1.5px solid #ef4444', background: 'rgba(239, 68, 68, 0.04)', position: 'relative' } : {}}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="leave-balance-value" style={{ color: isOver ? '#ef4444' : b.color }}>
+                      {b.remaining}
+                    </div>
+                    {isOver && (
+                      <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', padding: '2px 8px', fontWeight: 700 }}>
+                        <Lock size={10} /> LOCKED
+                      </span>
+                    )}
+                  </div>
+                  <div className="leave-balance-label">{b.label}</div>
+                  <div style={{ fontSize: '11px', color: isOver ? '#ef4444' : 'var(--text-muted)', marginTop: '4px', fontWeight: isOver ? 600 : 400 }}>
+                    Used: {b.used}/{b.max} {t('days', language)} • Remaining: <strong>{b.remaining}</strong>
+                    {isOver && <span style={{ display: 'block', color: '#ef4444', marginTop: '2px', fontSize: '10.5px' }}>⚠️ Quota Over — Locked</span>}
+                  </div>
                 </div>
-                <div className="leave-balance-label">{b.label}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Used: {b.used}/{b.max} {t('days', language)} • Remaining: <strong>{b.remaining}</strong>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -244,6 +362,71 @@ export default function LeaveScreen() {
           <button className={`tab ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>
             👨‍🏫 Staff Requests for Approval ({leaveRequests.filter(r => r.schoolCensusCode === currentSchoolCode && r.teacherId !== user?.id && r.status === 'pending').length} Pending)
           </button>
+        </div>
+      )}
+
+      {/* Class filter and search bar for principal reviewing staff requests */}
+      {isPrincipal && activeTab === 'all' && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Filter size={15} color="var(--primary)" />
+              {t('filterByClass', language)}:
+            </span>
+            <select
+              value={selectedClassFilter}
+              onChange={e => setSelectedClassFilter(e.target.value)}
+              className="form-control"
+              style={{ fontSize: '12.5px', padding: '5px 12px', height: '34px', minWidth: '150px', fontWeight: 600 }}
+            >
+              <option value="all">🌐 {t('allClasses', language)} ({leaveRequests.filter(r => r.schoolCensusCode === currentSchoolCode && r.teacherId !== user?.id).length})</option>
+              {uniqueStaffClasses.map(c => {
+                const count = leaveRequests.filter(r => {
+                  if (r.schoolCensusCode !== currentSchoolCode || r.teacherId === user?.id) return false;
+                  const { rawClass } = getTeacherInfo(r);
+                  return rawClass && rawClass.replace(/^class\s*/i, '').trim().toLowerCase() === c.toLowerCase();
+                }).length;
+                return (
+                  <option key={c} value={c}>Class {c} ({count})</option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 240px', maxWidth: '380px' }}>
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search teacher, class (e.g. 10A), reason..."
+                value={staffSearchQuery}
+                onChange={e => setStaffSearchQuery(e.target.value)}
+                style={{ fontSize: '12px', padding: '6px 12px 6px 32px', height: '34px', width: '100%' }}
+              />
+            </div>
+            {(selectedClassFilter !== 'all' || staffSearchQuery) && (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => { setSelectedClassFilter('all'); setStaffSearchQuery(''); }}
+                style={{ fontSize: '11px', whiteSpace: 'nowrap', height: '34px' }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -264,9 +447,20 @@ export default function LeaveScreen() {
               {isZonalAdmin
                 ? 'No principal leave requests submitted yet.'
                 : isPrincipal && activeTab === 'all'
-                ? 'No teacher leave requests pending approval in your school.'
+                ? (selectedClassFilter !== 'all' || staffSearchQuery
+                    ? 'No teacher leave requests match the selected class or search filter.'
+                    : 'No teacher leave requests pending approval in your school.')
                 : t('noLeaveRequests', language)}
             </p>
+            {isPrincipal && activeTab === 'all' && (selectedClassFilter !== 'all' || staffSearchQuery) && (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => { setSelectedClassFilter('all'); setStaffSearchQuery(''); }}
+                style={{ marginTop: '10px' }}
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="table-wrapper" style={{ border: 'none' }}>
@@ -274,6 +468,7 @@ export default function LeaveScreen() {
               <thead>
                 <tr>
                   {((isPrincipal && activeTab === 'all') || isZonalAdmin) && <th>Applicant</th>}
+                  {isPrincipal && activeTab === 'all' && <th>{t('teachersClass', language)}</th>}
                   {isZonalAdmin && <th>School</th>}
                   <th>{t('leaveType', language)}</th>
                   <th>Duration</th>
@@ -288,15 +483,82 @@ export default function LeaveScreen() {
                 {displayedRequests.map(req => {
                   const reqDays = calculateLeaveDays(req.startDate, req.endDate, req.type, req.isHalfDay);
                   const isPrincipalApplicant = req.applicantRole === 'principal';
+                  const teacherInfo = getTeacherInfo(req);
 
                   return (
                     <tr key={req.id}>
                       {((isPrincipal && activeTab === 'all') || isZonalAdmin) && (
                         <td>
-                          <div style={{ fontWeight: 600 }}>{req.teacherName}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            {isPrincipalApplicant ? '👔 School Principal' : '👨‍🏫 Teacher'}
+                          <div style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-main)' }}>{req.teacherName}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px', flexWrap: 'wrap' }}>
+                            <span>{isPrincipalApplicant ? '👔 School Principal' : '👨‍🏫 Teacher'}</span>
+                            {!isPrincipalApplicant && teacherInfo.formattedClass && (
+                              <span
+                                className="badge"
+                                style={{
+                                  background: 'rgba(59, 130, 246, 0.1)',
+                                  color: '#2563eb',
+                                  border: '1px solid rgba(59, 130, 246, 0.25)',
+                                  fontSize: '10.5px',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: 600,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}
+                              >
+                                🏛️ {teacherInfo.formattedClass}
+                              </span>
+                            )}
                           </div>
+                        </td>
+                      )}
+                      {isPrincipal && activeTab === 'all' && (
+                        <td>
+                          {teacherInfo.formattedClass ? (
+                            <div>
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '4px 9px',
+                                background: 'rgba(37, 99, 235, 0.1)',
+                                color: '#1d4ed8',
+                                borderRadius: '6px',
+                                fontWeight: 700,
+                                fontSize: '12px',
+                                border: '1px solid rgba(37, 99, 235, 0.25)',
+                              }}>
+                                <span>🏛️</span>
+                                <span>{teacherInfo.formattedClass}</span>
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '3px', fontWeight: 500 }}>
+                                {teacherInfo.teacherObj?.isClassTeacher
+                                  ? '⭐ Class Teacher'
+                                  : teacherInfo.teacherObj?.subject && teacherInfo.teacherObj.subject !== 'Not assigned'
+                                  ? `Sub: ${teacherInfo.teacherObj.subject}`
+                                  : 'Assigned Class'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="badge" style={{
+                                background: 'rgba(107, 114, 128, 0.1)',
+                                color: 'var(--text-muted)',
+                                border: '1px solid rgba(107, 114, 128, 0.2)',
+                                fontSize: '11px',
+                                padding: '3px 8px'
+                              }}>
+                                {teacherInfo.teacherObj?.subject && teacherInfo.teacherObj.subject !== 'Not assigned'
+                                  ? `Subject: ${teacherInfo.teacherObj.subject}`
+                                  : 'Subject Teacher'}
+                              </span>
+                              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                (Across classes)
+                              </div>
+                            </div>
+                          )}
                         </td>
                       )}
                       {isZonalAdmin && (
@@ -500,35 +762,77 @@ export default function LeaveScreen() {
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value as LeaveType }))}
                 >
-                  <option value="casual">{t('casual', language)} (Casual Leave)</option>
-                  <option value="medical">{t('medical', language)} (Medical Leave)</option>
-                  <option value="annual">{t('annual', language)} (Annual Leave)</option>
+                  <option value="casual" disabled={casualRemaining <= 0}>
+                    {t('casual', language)} (Casual Leave) {casualRemaining <= 0 ? '🔒 [0 Left - LOCKED]' : `(${casualRemaining}d left)`}
+                  </option>
+                  <option value="medical" disabled={medicalRemaining <= 0}>
+                    {t('medical', language)} (Medical Leave) {medicalRemaining <= 0 ? '🔒 [0 Left - LOCKED]' : `(${medicalRemaining}d left)`}
+                  </option>
+                  <option value="annual" disabled={annualRemaining <= 0}>
+                    {t('annual', language)} (Annual Leave) {annualRemaining <= 0 ? '🔒 [0 Left - LOCKED]' : `(${annualRemaining}d left)`}
+                  </option>
                   <option value="duty">{t('duty', language)} (Official Duty Leave)</option>
-                  <option value="half_casual">Half Day - Casual (0.5 Day)</option>
-                  <option value="half_medical">Half Day - Medical (0.5 Day)</option>
-                  <option value="half_annual">Half Day - Annual (0.5 Day)</option>
+                  <option value="half_casual" disabled={casualRemaining < 0.5}>
+                    Half Day - Casual (0.5 Day) {casualRemaining < 0.5 ? '🔒 [0 Left - LOCKED]' : `(${casualRemaining}d left)`}
+                  </option>
+                  <option value="half_medical" disabled={medicalRemaining < 0.5}>
+                    Half Day - Medical (0.5 Day) {medicalRemaining < 0.5 ? '🔒 [0 Left - LOCKED]' : `(${medicalRemaining}d left)`}
+                  </option>
+                  <option value="half_annual" disabled={annualRemaining < 0.5}>
+                    Half Day - Annual (0.5 Day) {annualRemaining < 0.5 ? '🔒 [0 Left - LOCKED]' : `(${annualRemaining}d left)`}
+                  </option>
                 </select>
               </div>
 
               {/* Remaining balance badge */}
               <div style={{
-                background: 'rgba(2, 132, 199, 0.08)',
-                border: '1px solid rgba(2, 132, 199, 0.25)',
+                background: isLeaveLocked ? 'rgba(239, 68, 68, 0.08)' : 'rgba(2, 132, 199, 0.08)',
+                border: `1.5px solid ${isLeaveLocked ? '#ef4444' : 'rgba(2, 132, 199, 0.25)'}`,
                 borderRadius: '8px',
                 padding: '10px 14px',
-                marginBottom: '16px',
+                marginBottom: '14px',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 fontSize: '12px',
               }}>
-                <span style={{ color: 'var(--text-secondary)' }}>
-                  Your Available Balance for <strong>{form.type.toUpperCase()}</strong>:
+                <span style={{ color: isLeaveLocked ? '#ef4444' : 'var(--text-secondary)', fontWeight: isLeaveLocked ? 600 : 400 }}>
+                  Available Balance for <strong>{form.type.toUpperCase()}</strong>:
                 </span>
-                <span className={`badge ${selectedTypeRemaining > 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontWeight: 700, fontSize: '12px' }}>
-                  {selectedTypeRemaining} Days Remaining
+                <span className={`badge ${selectedTypeRemaining > 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  {isBalanceExhausted && <Lock size={12} />}
+                  {isOfficialDuty ? 'Unlimited (Official)' : `${selectedTypeRemaining} Days Remaining`}
                 </span>
               </div>
+
+              {/* Locked Warning Alert Banner if Leave Balance is Over */}
+              {isLeaveLocked && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1.5px solid #ef4444',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  color: '#ef4444',
+                }}>
+                  <Lock size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '13px' }}>
+                      🔒 Leave Balance Over — Request Locked
+                    </div>
+                    <div style={{ fontSize: '12px', marginTop: '3px', lineHeight: 1.4, color: 'var(--text-color)' }}>
+                      {isBalanceExhausted ? (
+                        <>Your remaining balance for <strong>{selectedTypeBase.toUpperCase()}</strong> leave is <strong>0 days</strong>. You have used your allocated quota for this academic year. Applying for this leave category is locked.</>
+                      ) : (
+                        <>You requested <strong>{requestedDays} day{requestedDays > 1 ? 's' : ''}</strong>, but only <strong>{selectedTypeRemaining} day{selectedTypeRemaining > 1 ? 's' : ''}</strong> remain in your {selectedTypeBase} leave balance. Please reduce your requested leave dates.</>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Half Day Session Picker if Half Day is selected */}
               {form.isHalfDay && (
@@ -623,9 +927,24 @@ export default function LeaveScreen() {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                   {t('cancel', language)}
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? <span className="spinner" /> : null}
-                  {isPrincipal ? 'Submit to Zonal Admin' : t('submitLeave', language)}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting || isLeaveLocked}
+                  style={isLeaveLocked ? { opacity: 0.6, cursor: 'not-allowed', background: '#64748b', borderColor: '#64748b' } : {}}
+                  title={isLeaveLocked ? 'Leave quota is over. Submission is locked.' : undefined}
+                >
+                  {isLeaveLocked ? (
+                    <>
+                      <Lock size={15} />
+                      <span>Locked ({isBalanceExhausted ? 'Quota Over' : 'Days Exceeded'})</span>
+                    </>
+                  ) : (
+                    <>
+                      {submitting ? <span className="spinner" /> : null}
+                      {isPrincipal ? 'Submit to Zonal Admin' : t('submitLeave', language)}
+                    </>
+                  )}
                 </button>
               </div>
             </form>

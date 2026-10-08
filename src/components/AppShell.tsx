@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { isNoticeRelevantToUser, isUserSubjectSpecialist, type AppLanguage } from '../data/models';
+import { isNoticeRelevantToUser, isUserSubjectSpecialist, deduplicateNotices, type AppLanguage } from '../data/models';
 
 const NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
@@ -37,7 +37,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsub = databaseService.subscribeToNotices(
       (notices) => {
-        const relevantCount = notices.filter(n => isNoticeRelevantToUser(n, user ?? null)).length;
+        const unique = deduplicateNotices(notices);
+        const relevantCount = unique.filter(n => isNoticeRelevantToUser(n, user ?? null)).length;
         setNotifCount(relevantCount);
       },
       (err) => console.error('Failed to subscribe to notice count:', err)

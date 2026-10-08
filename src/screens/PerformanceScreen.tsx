@@ -453,13 +453,14 @@ export default function PerformanceScreen() {
       const className = currentClassObj ? `Grade ${currentClassObj.grade}${currentClassObj.section}` : selectedClass;
 
       const notice: import('../data/models').Notice = {
-        id: `notice_low_marks_${item.student.id}_t${selectedTerm}_${Date.now()}`,
+        id: `notice_low_marks_${item.student.id}_t${selectedTerm}`,
         title: `⚠️ Low Performance Alert — ${item.student.name}`,
         body: `Dear Parent/Guardian,\n\nThis is to inform you that your child ${item.student.name} (Adm#: ${item.student.admissionNumber || item.student.id}) from ${className} has scored below the expected threshold in the Term ${selectedTerm} examination.\n\n📊 Overall Performance:\n• Average Mark: ${item.avgMarks}% (Grade: ${item.grade})\n• Total Marks: ${item.totalMarks} across ${item.subjectsCount} subjects\n\n⚠️ Weak Subjects:\n• ${weakList}\n\nWe kindly request your attention and support to help improve your child's academic performance. Please meet the class teacher to discuss a plan for improvement.\n\nBest Regards,\n${user.name}\n${className} Homeroom Teacher`,
         date: new Date().toISOString(),
         category: 'Academic',
         targetRole: 'parent',
         targetClassRoom: selectedClass,
+        targetStudentId: item.student.id,
         authorName: user.name,
         authorRole: user.role,
         priority: 'high',

@@ -56,6 +56,7 @@ export default function TimetableScreen() {
   // Dispatch state
   const [dispatchNote, setDispatchNote] = useState('');
   const [dispatchSuccess, setDispatchSuccess] = useState(false);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
 
   // Add/Edit manual slot form
@@ -235,7 +236,8 @@ export default function TimetableScreen() {
 
   // Handle Official Notice Broadcast Dispatch
   async function handleBroadcastNotice() {
-    if (!activeClassObj) return;
+    if (!activeClassObj || isBroadcasting) return;
+    setIsBroadcasting(true);
     try {
       await databaseService.publishTimetableNotice({
         classRoom: selectedClass,
@@ -251,6 +253,8 @@ export default function TimetableScreen() {
       showToast('Timetable published! System notice and parent alerts dispatched.');
     } catch (err) {
       console.error('Failed to broadcast timetable notice:', err);
+    } finally {
+      setIsBroadcasting(false);
     }
   }
 
@@ -963,10 +967,20 @@ export default function TimetableScreen() {
                 <button
                   className="btn btn-primary"
                   onClick={handleBroadcastNotice}
+                  disabled={isBroadcasting}
                   style={{ width: '100%', justifyContent: 'center' }}
                 >
-                  <Send size={16} />
-                  Broadcast Notice to Teachers, Students & Parents
+                  {isBroadcasting ? (
+                    <>
+                      <span className="spinner spinner-sm" />
+                      Broadcasting Notice...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} />
+                      Broadcast Notice to Teachers, Students & Parents
+                    </>
+                  )}
                 </button>
               </div>
             )}

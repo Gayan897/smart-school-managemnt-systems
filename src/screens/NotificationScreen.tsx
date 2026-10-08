@@ -7,7 +7,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { isNoticeRelevantToUser, type Notice, type NoticeTargetRole } from '../data/models';
+import { isNoticeRelevantToUser, deduplicateNotices, type Notice, type NoticeTargetRole } from '../data/models';
 
 export default function NotificationScreen() {
   const { user, language } = useAuth();
@@ -33,8 +33,12 @@ export default function NotificationScreen() {
 
   const categories = [
     { value: 'all', label: t('all', language) },
-    { value: 'Zonal Request', label: '🔑 Zonal Key Request' },
-    { value: 'Leave Request', label: t('categoryLeaveRequest', language) },
+    ...(user?.role === 'zonal_admin' ? [
+      { value: 'Zonal Request', label: '🔑 Zonal Key Request' },
+      { value: 'Leave Request', label: '🏛️ Principal Leave Requests' },
+    ] : [
+      { value: 'Leave Request', label: user?.role === 'teacher' ? 'My Leave Updates' : t('categoryLeaveRequest', language) },
+    ]),
     { value: 'General', label: t('categoryGeneral', language) },
     { value: 'Academic', label: t('categoryAcademic', language) },
     { value: 'Administrative', label: t('categoryAdministrative', language) },
@@ -47,7 +51,7 @@ export default function NotificationScreen() {
     setLoading(true);
     try {
       const data = await databaseService.getNotices();
-      setNotices(data);
+      setNotices(deduplicateNotices(data));
     } catch (err) {
       console.error('Error fetching notices:', err);
     } finally {
@@ -60,7 +64,7 @@ export default function NotificationScreen() {
     setLoading(true);
     const unsub = databaseService.subscribeToNotices(
       (data) => {
-        setNotices(data);
+        setNotices(deduplicateNotices(data));
         setLoading(false);
       },
       (err) => {
@@ -87,6 +91,8 @@ export default function NotificationScreen() {
         priority: newNotice.priority,
         authorName: user.name,
         authorRole: user.role,
+        schoolCensusCode: user.schoolCensusCode,
+        schoolName: user.schoolName,
       };
 
       await databaseService.createNotice(createdNotice);
@@ -119,7 +125,9 @@ export default function NotificationScreen() {
   };
 
   // Filtering Logic
-  const filteredNotices = notices.filter(n => {
+  const uniqueNotices = deduplicateNotices(notices);
+
+  const filteredNotices = uniqueNotices.filter(n => {
     // 1. Core relevance check (Role & School Census Code isolation)
     if (!isNoticeRelevantToUser(n, user)) return false;
 
@@ -142,7 +150,7 @@ export default function NotificationScreen() {
     return matchesSearch && matchesCategory && matchesPriority && matchesAudience;
   });
 
-  const schoolNotices = notices.filter(n => isNoticeRelevantToUser(n, user));
+  const schoolNotices = uniqueNotices.filter(n => isNoticeRelevantToUser(n, user));
 
   const totalUrgent = schoolNotices.filter(n => n.priority === 'urgent').length;
   const totalLeaveReqs = schoolNotices.filter(n => n.category === 'Leave Request').length;
@@ -193,8 +201,14 @@ export default function NotificationScreen() {
             <Bell size={22} color="#0284c7" />
           </div>
           <div className="stat-info">
-            <div className="stat-value" style={{ color: '#0284c7' }}>{notices.length}</div>
-            <div className="stat-label">Total Notifications</div>
+            <div className="stat-value" style={{ color: '#0284c7' }}>{schoolNotices.length}</div>
+            <div className="stat-label">
+              {user?.role === 'zonal_admin'
+                ? 'Zonal Oversight Notices'
+                : user?.role === 'teacher'
+                  ? 'My Notifications'
+                  : 'Total Notifications'}
+            </div>
           </div>
         </div>
 
@@ -204,7 +218,13 @@ export default function NotificationScreen() {
           </div>
           <div className="stat-info">
             <div className="stat-value" style={{ color: '#f59e0b' }}>{totalLeaveReqs}</div>
-            <div className="stat-label">Leave Requests</div>
+            <div className="stat-label">
+              {user?.role === 'zonal_admin'
+                ? 'Principal Leave Requests'
+                : user?.role === 'teacher'
+                  ? 'My Leave Updates'
+                  : 'Staff Leave Requests'}
+            </div>
           </div>
         </div>
 
@@ -214,7 +234,9 @@ export default function NotificationScreen() {
           </div>
           <div className="stat-info">
             <div className="stat-value" style={{ color: '#e11d48' }}>{totalUrgent}</div>
-            <div className="stat-label">Urgent Alerts</div>
+            <div className="stat-label">
+              {user?.role === 'zonal_admin' ? 'Urgent Zonal Alerts' : 'Urgent Alerts'}
+            </div>
           </div>
         </div>
 
@@ -223,8 +245,14 @@ export default function NotificationScreen() {
             <Shield size={22} color="#0d9488" />
           </div>
           <div className="stat-info">
-            <div className="stat-value" style={{ color: '#0d9488' }}>{totalForUser}</div>
-            <div className="stat-label">Relevant to {user?.role === 'zonal_admin' ? 'Zonal Admin' : user?.role === 'principal' ? 'Principal' : 'Teacher'}</div>
+            <div className="stat-value" style={{ color: '#0d9488' }}>
+              {user?.role === 'zonal_admin'
+                ? schoolNotices.filter(n => n.category === 'Zonal Request' || n.targetRole === 'zonal_admin').length
+                : schoolNotices.filter(n => n.category === 'General' || n.category === 'Academic' || n.category === 'Administrative').length}
+            </div>
+            <div className="stat-label">
+              {user?.role === 'zonal_admin' ? 'Zonal Key Requests' : 'School Announcements'}
+            </div>
           </div>
         </div>
       </div>
@@ -281,8 +309,15 @@ export default function NotificationScreen() {
             >
               <option value="all">{t('targetAudience', language)}: {t('all', language)}</option>
               <option value="all">{t('allAudience', language)}</option>
-              <option value="teacher">{t('teachersOnly', language)}</option>
-              <option value="principal">{t('principalOnlyAudience', language)}</option>
+              {user?.role !== 'zonal_admin' && (
+                <option value="teacher">{t('teachersOnly', language)}</option>
+              )}
+              {user?.role !== 'teacher' && (
+                <option value="principal">{t('principalOnlyAudience', language)}</option>
+              )}
+              {user?.role === 'zonal_admin' && (
+                <option value="zonal_admin">Zonal Admin Directives</option>
+              )}
             </select>
           </div>
         </div>
@@ -325,7 +360,10 @@ export default function NotificationScreen() {
           {filteredNotices.map(notice => {
             const isUrgent = notice.priority === 'urgent';
             const isHigh = notice.priority === 'high';
-            const canDelete = true;
+            const canDelete =
+              user?.role === 'principal' ||
+              user?.role === 'zonal_admin' ||
+              Boolean(notice.authorName && user?.name && notice.authorName.toLowerCase() === user.name.toLowerCase());
 
             return (
               <div
@@ -422,12 +460,12 @@ export default function NotificationScreen() {
 
                   {notice.category === 'Leave Request' && (
                     <Link
-                      to="/leave"
+                      to={user?.role === 'zonal_admin' ? '/admin' : '/leave'}
                       className="btn btn-secondary btn-sm"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 10px' }}
                     >
                       <FileText size={13} />
-                      <span>{t('leave', language)} Screen</span>
+                      <span>{user?.role === 'zonal_admin' ? 'Review in Admin Portal' : `${t('leave', language)} Screen`}</span>
                       <ArrowRight size={13} />
                     </Link>
                   )}

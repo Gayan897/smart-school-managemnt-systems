@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Sparkles, Activity, Key, Shield, Clock, BookOpen } from 'lucide-react';
+import { Users, GraduationCap, FileText, CheckCircle, Bell, ArrowRight, UserCheck, Activity, Key, Shield, Clock, BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
-import { isNoticeRelevantToUser, isUserSubjectSpecialist, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ZonalKeyRequest, type SchoolClass } from '../data/models';
+import { isNoticeRelevantToUser, isUserSubjectSpecialist, deduplicateNotices, type Notice, type Student, type Teacher, type LeaveRequest, type AttendanceRecord, type ZonalKeyRequest, type SchoolClass } from '../data/models';
 
 export default function DashboardScreen() {
   const { user, language } = useAuth();
@@ -41,7 +41,7 @@ export default function DashboardScreen() {
 
     // Real-time notices subscription
     const unsubNotices = databaseService.subscribeToNotices((data) => {
-      setNotices(data);
+      setNotices(deduplicateNotices(data));
     });
 
     // Real-time zonal key requests subscription for zonal admin
@@ -58,6 +58,7 @@ export default function DashboardScreen() {
 
   const isZonalAdmin = user?.role === 'zonal_admin';
   const isTeacher = user?.role === 'teacher';
+  const isPrincipal = user?.role === 'principal';
   const currentSchoolCode = user?.schoolCensusCode;
 
   const today = new Date().toISOString().split('T')[0];
@@ -108,7 +109,40 @@ export default function DashboardScreen() {
 
   const assignedClassRoom = rawClass && rawClass !== 'Not assigned' ? rawClass : null;
 
-  const relevantNotices = notices
+  const normalizeClass = (c?: string | null) => {
+    if (!c) return '';
+    return c.trim().toLowerCase().replace(/^(class|grade)\s*/i, '').replace(/[\s\-_]/g, '');
+  };
+
+  const isClassMatch = (studentClass?: string | null, targetClass?: string | null) => {
+    if (!studentClass || !targetClass) return false;
+    if (studentClass.toLowerCase() === targetClass.toLowerCase()) return true;
+    return normalizeClass(studentClass) === normalizeClass(targetClass);
+  };
+
+  const availableClasses = useMemo(() => {
+    if (classes && classes.length > 0) {
+      return classes.map(c => ({ id: c.id, name: c.id }));
+    }
+    const distinct = Array.from(new Set(displayStudents.map(s => s.classRoom).filter(Boolean)));
+    distinct.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return distinct.map(id => ({ id, name: id }));
+  }, [classes, displayStudents]);
+
+  const effectiveClass = assignedClassRoom || (availableClasses.length > 0 ? availableClasses[0].id : '');
+
+  const classStudents = useMemo(() => {
+    if (!effectiveClass) return [];
+    return displayStudents.filter(s => isClassMatch(s.classRoom, effectiveClass));
+  }, [displayStudents, effectiveClass]);
+
+  const classStudentIds = useMemo(() => new Set(classStudents.map(s => s.id)), [classStudents]);
+
+  const classPresentToday = attendance.filter(a =>
+    a.date.startsWith(today) && a.status === 'present' && classStudentIds.has(a.studentId)
+  ).length;
+
+  const relevantNotices = deduplicateNotices(notices)
     .filter(n => {
       if (!isNoticeRelevantToUser(n, user ?? null)) return false;
 
@@ -141,28 +175,27 @@ export default function DashboardScreen() {
 
   const isSubjectSpecialist = isUserSubjectSpecialist(user);
 
-  const stats = isSubjectSpecialist
+  const stats = isTeacher
     ? [
         {
-          label: 'Specialist Subject',
-          value: user?.subject || teacherObj?.subject || 'Multi-Class Specialist',
-          icon: BookOpen,
-          color: '#8b5cf6',
-          bg: 'rgba(139,92,246,0.15)',
-        },
-        {
-          label: 'Teaching Scope',
-          value: `${classes.length || 12} Classes`,
+          label: effectiveClass
+            ? `${t('classStudents', language)} (${effectiveClass.toLowerCase().startsWith('class') ? effectiveClass : `Class ${effectiveClass}`})`
+            : t('classStudents', language),
+          value: classStudents.length,
           icon: GraduationCap,
           color: '#0284c7',
           bg: 'rgba(2,132,199,0.15)',
         },
         {
-          label: t('totalTeachers', language),
-          value: displayTeachers.length,
-          icon: Users,
-          color: '#0d9488',
-          bg: 'rgba(13,148,136,0.15)',
+          label: isSubjectSpecialist && (user?.subject || teacherObj?.subject)
+            ? 'Specialist Subject'
+            : t('totalTeachers', language),
+          value: isSubjectSpecialist && (user?.subject || teacherObj?.subject)
+            ? (user?.subject || teacherObj?.subject || '')
+            : displayTeachers.length,
+          icon: isSubjectSpecialist && (user?.subject || teacherObj?.subject) ? BookOpen : Users,
+          color: isSubjectSpecialist && (user?.subject || teacherObj?.subject) ? '#8b5cf6' : '#0d9488',
+          bg: isSubjectSpecialist && (user?.subject || teacherObj?.subject) ? 'rgba(139,92,246,0.15)' : 'rgba(13,148,136,0.15)',
         },
         {
           label: t('pendingLeave', language),
@@ -171,10 +204,19 @@ export default function DashboardScreen() {
           color: '#f59e0b',
           bg: 'rgba(245,158,11,0.15)',
         },
+        {
+          label: effectiveClass
+            ? `${t('presentToday', language)} (${effectiveClass.toLowerCase().startsWith('class') ? effectiveClass : `Class ${effectiveClass}`})`
+            : t('presentToday', language),
+          value: classPresentToday,
+          icon: CheckCircle,
+          color: '#10b981',
+          bg: 'rgba(16,185,129,0.15)',
+        },
       ]
     : [
         {
-          label: t('totalStudents', language),
+          label: isPrincipal || isZonalAdmin ? t('overallStudents', language) : t('totalStudents', language),
           value: displayStudents.length,
           icon: GraduationCap,
           color: '#0284c7',
@@ -354,122 +396,6 @@ export default function DashboardScreen() {
           </div>
         ))}
       </div>
-
-      {/* Subject Specialist Quick Workspaces */}
-      {isSubjectSpecialist && (
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={16} color="var(--primary)" />
-              Specialist Quick Workspaces
-            </h2>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Rotational subject faculty portal • Homeroom duties handled by class teachers
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-            <Link
-              to="/timetable"
-              className="card"
-              style={{
-                padding: '16px',
-                textDecoration: 'none',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                border: '1px solid rgba(2, 132, 199, 0.25)',
-                background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.05) 0%, rgba(2, 132, 199, 0.01) 100%)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7' }}>
-                  <Clock size={20} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>My Teaching Timetable</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>View rotational class schedule</div>
-                </div>
-              </div>
-              <div style={{ fontSize: '12px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                View Schedule <ArrowRight size={13} />
-              </div>
-            </Link>
-
-            <Link
-              to="/leave"
-              className="card"
-              style={{
-                padding: '16px',
-                textDecoration: 'none',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                border: '1px solid rgba(245, 158, 11, 0.25)',
-                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.01) 100%)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Leave & Proxy Notes</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Submit leave & lesson plans</div>
-                </div>
-              </div>
-              <div style={{ fontSize: '12px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                Manage Leave <ArrowRight size={13} />
-              </div>
-            </Link>
-
-            <Link
-              to="/notifications"
-              className="card"
-              style={{
-                padding: '16px',
-                textDecoration: 'none',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                border: '1px solid rgba(139, 92, 246, 0.25)',
-                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(139, 92, 246, 0.01) 100%)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6' }}>
-                  <Bell size={20} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Staff Bulletins</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>School notices & circulars</div>
-                </div>
-              </div>
-              <div style={{ fontSize: '12px', color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                Read Bulletins <ArrowRight size={13} />
-              </div>
-            </Link>
-
-            <Link
-              to="/profile"
-              className="card"
-              style={{
-                padding: '16px',
-                textDecoration: 'none',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                border: '1px solid rgba(16, 185, 129, 0.25)',
-                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.01) 100%)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
-                  <Users size={20} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Specialist Profile</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Qualifications & credentials</div>
-                </div>
-              </div>
-              <div style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                My Profile <ArrowRight size={13} />
-              </div>
-            </Link>
-          </div>
-        </div>
-      )}
 
       {/* Content grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>

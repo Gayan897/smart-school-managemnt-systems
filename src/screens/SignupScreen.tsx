@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight, ArrowLeft, Mail, Smartphone, Send, X, Bell, CheckCircle, ScanLine } from 'lucide-react';
+import {
+  GraduationCap, ShieldCheck, Key, Building2, UserCheck, ChevronRight,
+  ArrowLeft, Mail, Smartphone, Send, X, Bell, CheckCircle, ScanLine, Lock, AlertCircle
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../i18n/strings';
 import { databaseService } from '../data/database';
@@ -132,7 +135,10 @@ export default function SignupScreen() {
   }, []);
 
   const selectedSchool = schools.find(s => s.censusCode === selectedSchoolCode);
-  const isPrincipalRegistered = Boolean(selectedSchool?.isRegistered && selectedSchool?.principalId) && !isMagicInvite;
+  const isPrincipalRegistered = Boolean(
+    (selectedSchool?.isRegistered && selectedSchool?.principalId) ||
+    (typeof localStorage !== 'undefined' && localStorage.getItem(`sams_principal_registered_${selectedSchoolCode}`) === 'true')
+  ) && !isMagicInvite;
 
   useEffect(() => {
     if (isPrincipalRegistered && role === 'principal') {
@@ -343,6 +349,9 @@ export default function SignupScreen() {
         }
         // Verification passed ✅
       } else if (role === 'principal') {
+        if (isPrincipalRegistered) {
+          throw new Error(`Principal registration is locked. A verified Principal is already active for ${selectedSchool?.name || 'this school'}.`);
+        }
         if (!zonalSecretKey.trim()) {
           throw new Error('Zonal Master Security Key is required for Principal registration.');
         }
@@ -591,16 +600,26 @@ export default function SignupScreen() {
                     const newCode = e.target.value;
                     setSelectedSchoolCode(newCode);
                     const sch = schools.find(s => s.censusCode === newCode);
-                    if (sch?.isRegistered && sch?.principalId && !isMagicInvite && role === 'principal') {
+                    const isSchPrincipalActive = Boolean(
+                      (sch?.isRegistered && sch?.principalId) ||
+                      (typeof localStorage !== 'undefined' && localStorage.getItem(`sams_principal_registered_${newCode}`) === 'true')
+                    ) && !isMagicInvite;
+                    if (isSchPrincipalActive && role === 'principal') {
                       setRole('teacher');
                     }
                   }}
                 >
-                  {schools.map(sch => (
-                    <option key={sch.censusCode} value={sch.censusCode}>
-                      {sch.name} ({sch.zone} Zone - Census: {sch.censusCode}){sch.isRegistered && sch.principalId ? ' 🔒 [Principal Registered]' : ''}
-                    </option>
-                  ))}
+                  {schools.map(sch => {
+                    const isSchLocked = Boolean(
+                      (sch.isRegistered && sch.principalId) ||
+                      (typeof localStorage !== 'undefined' && localStorage.getItem(`sams_principal_registered_${sch.censusCode}`) === 'true')
+                    );
+                    return (
+                      <option key={sch.censusCode} value={sch.censusCode}>
+                        {sch.name} ({sch.zone} Zone - Census: {sch.censusCode}){isSchLocked ? ' 🔒 [Principal Active - Locked]' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
@@ -627,30 +646,48 @@ export default function SignupScreen() {
                       padding: '12px 8px',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
                       borderRadius: '8px',
-                      opacity: isPrincipalRegistered ? 0.55 : 1,
+                      opacity: isPrincipalRegistered ? 0.5 : 1,
                       cursor: isPrincipalRegistered ? 'not-allowed' : 'pointer',
+                      background: isPrincipalRegistered ? 'rgba(148, 163, 184, 0.08)' : undefined,
+                      border: isPrincipalRegistered ? '1.5px dashed rgba(239, 68, 68, 0.4)' : undefined,
                     }}
                     disabled={isPrincipalRegistered}
                     onClick={() => { if (!isPrincipalRegistered) { setRole('principal'); setError(''); } }}
-                    title={isPrincipalRegistered ? `A Principal is already registered for ${selectedSchool?.name}` : undefined}
+                    title={isPrincipalRegistered ? `Principal position is locked because a Principal is already registered/active for ${selectedSchool?.name}` : undefined}
                   >
-                    <span style={{ fontSize: '20px' }}>🏫</span>
-                    <span style={{ fontWeight: 600 }}>Principal {isPrincipalRegistered ? '🔒' : ''}</span>
+                    <span style={{ fontSize: '20px' }}>🏛️</span>
+                    <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      Principal {isPrincipalRegistered && <Lock size={13} color="#ef4444" />}
+                    </span>
+                    {isPrincipalRegistered && (
+                      <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 700 }}>
+                        (Locked - Active)
+                      </span>
+                    )}
                   </button>
                 </div>
-                {isPrincipalRegistered && role === 'principal' && (
+                {isPrincipalRegistered && (
                   <div style={{
-                    fontSize: '11px',
+                    fontSize: '12px',
                     color: '#e11d48',
                     background: 'rgba(225, 29, 72, 0.08)',
-                    border: '1px solid rgba(225, 29, 72, 0.25)',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    marginTop: '8px',
+                    border: '1.5px solid rgba(225, 29, 72, 0.3)',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    marginTop: '10px',
                     fontWeight: 600,
-                    lineHeight: 1.4
+                    lineHeight: 1.4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
                   }}>
-                    🔒 <strong>Principal Registered:</strong> {selectedSchool?.principalName || 'Verified Principal'} has already registered for {selectedSchool?.name}.
+                    <Lock size={18} style={{ flexShrink: 0 }} />
+                    <div>
+                      <div>🔒 Principal Registration Locked</div>
+                      <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        A verified Principal ({selectedSchool?.principalName || 'Active Head of School'}) is already registered and logged for <strong>{selectedSchool?.name}</strong>. Each school is strictly limited to one Principal account. All staff members must register as Teacher.
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

@@ -44,6 +44,8 @@ const strings: Translations = {
   // Dashboard
   welcome: { english: 'Welcome back', sinhala: 'නැවත ස්වාගත යි', tamil: 'மீண்டும் வரவேற்கிறோம்' },
   totalStudents: { english: 'Total Students', sinhala: 'සිසුන් ගණන', tamil: 'மொத்த மாணவர்கள்' },
+  classStudents: { english: 'Class Students', sinhala: 'පන්තියේ සිසුන්', tamil: 'வகுப்பு மாணவர்கள்' },
+  overallStudents: { english: 'Total Students (Overall)', sinhala: 'මුළු සිසුන් ගණන (මුළු පාසල)', tamil: 'மொத்த மாணவர்கள் (முழு பள்ளி)' },
   totalTeachers: { english: 'Total Teachers', sinhala: 'ගුරුවරුන් ගණන', tamil: 'மொத்த ஆசிரியர்கள்' },
   pendingLeave: { english: 'Pending Leave', sinhala: 'අනුමත නොකළ නිවාඩු', tamil: 'நிலுவை விடுப்பு' },
   presentToday: { english: 'Present Today', sinhala: 'අද පැමිණ ඇත', tamil: 'இன்று வருகை' },
@@ -237,7 +239,10 @@ const strings: Translations = {
   highCompetition: { english: 'High Competition', sinhala: 'ඉහළ තරඟකාරිත්වය', tamil: 'அதிக போட்டி' },
   mediumCompetition: { english: 'Medium Competition', sinhala: 'මධ්‍යම තරඟකාරිත්වය', tamil: 'நடுத்தர போட்டி' },
   lowCompetition: { english: 'Low Competition', sinhala: 'අඩු තරඟකාරිත්වය', tamil: 'குறைந்த போட்டி' },
-  ugcNote: { english: 'Z-Score data based on UGC Sri Lanka admission cycles (2022/2023). Ranges are approximations.', sinhala: 'Z-ලකුණු දත්ත UGC ශ්‍රී ලංකා ඇතුළත් කිරීමේ චක්‍ර (2022/2023) මත පදනම් වේ.', tamil: 'Z-மதிப்பெண் தரவு UGC இலங்கை அனுமதி சுழற்சிகளை (2022/2023) அடிப்படையாகக் கொண்டது.' },
+  ugcNote: { english: 'Z-Score benchmarks and university pathway data based on UGC Sri Lanka Official Admissions Guide (Latest 2024/2025 Edition). Cut-offs represent minimum all-island and district admission thresholds.', sinhala: 'Z-ලකුණු මිණුම් සලකුණු සහ විශ්වවිද්‍යාල මාර්ග දත්ත UGC ශ්‍රී ලංකා නිල ප්‍රවේශ මාර්ගෝපදේශය (2024/2025 නවතම සංස්කරණය) මත පදනම් වේ.', tamil: 'Z-மதிப்பெண் அளவுகோல்கள் மற்றும் பல்கலைக்கழக பாதை தரவு UGC இலங்கை உத்தியோகபூர்வ சேர்க்கை வழிகாட்டியை (2024/2025 சமீபத்திய பதிப்பு) அடிப்படையாகக் கொண்டது.' },
+  zScoreCalculator: { english: 'Z-Score Pathway Advisor', sinhala: 'Z-ලකුණු මාර්ග උපදේශක', tamil: 'Z-மதிப்பெண் பாதை ஆலோசகர்' },
+  teachersClass: { english: "Teacher's Class", sinhala: 'ගුරුවරයාගේ පන්තිය', tamil: 'ஆசிரியரின் வகுப்பு' },
+  filterByClass: { english: 'Filter by Class', sinhala: 'පන්තිය අනුව පෙරහන් කරන්න', tamil: 'வகுப்பின்படி வடிகட்டவும்' },
 
   // Notifications
   notifications: { english: 'Notifications', sinhala: 'නිවේදන', tamil: 'அறிவிப்புகள்' },
